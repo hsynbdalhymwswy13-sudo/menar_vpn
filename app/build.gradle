@@ -8,10 +8,13 @@ android {
 
     defaultConfig {
         applicationId 'com.menar.vpn'
-        minSdk 23
+        minSdk 24
         targetSdk 35
         versionCode 1
         versionName '1.0'
     }
 }
 
+dependencies {
+    implementation(name: 'libbox', ext: 'aar')
+}
