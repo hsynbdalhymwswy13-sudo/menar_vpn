@@ -29,6 +29,11 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Download libbox
+        run: |
+          mkdir -p app/libs
+          curl -L -o app/libs/libbox.aar https://github.com/singbox-android/libbox/releases/download/1.14.1/libbox.aar
+
       - name: Build APK
         run: gradle assembleDebug
 
