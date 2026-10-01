@@ -1,9 +1,6 @@
 pluginManagement {
     resolutionStrategy {
         eachPlugin {
-            if (requested.id.id == "org.jetbrains.kotlin.plugin.compose") {
-                useModule("org.jetbrains.kotlin:compose-compiler-gradle-plugin:${requested.version}")
-            }
         }
     }
     resolutionStrategy {
