@@ -3,7 +3,6 @@ pluginManagement {
         eachPlugin {
             if (requested.id.id == "com.android.application") useModule("com.android.tools.build:gradle:9.3.1")
             if (requested.id.id == "com.android.library") useModule("com.android.tools.build:gradle:9.3.1")
-            if (requested.id.id == "org.jetbrains.kotlin.plugin.compose") useModule("org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.4.10")
         }
     }
     repositories {
