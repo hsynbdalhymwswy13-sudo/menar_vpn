@@ -1,0 +1,115 @@
+name: Build Menar VPN APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-libbox:
+    name: Build libbox (${{ matrix.go_arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go_arch:
+          - "386"
+          - amd64
+          - arm
+          - arm64
+
+    steps:
+      - name: Checkout sing-box
+        uses: actions/checkout@v4
+        with:
+          repository: reF1nd/sing-box
+          ref: v1.15.0-alpha.8
+          fetch-depth: 1
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.8
+          cache: false
+
+      - name: Setup Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28
+
+      - name: Setup OpenJDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build library
+        run: |
+          make lib_install
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          go run ./cmd/internal/build_libbox -target android -platform android/${{ matrix.go_arch }}
+          mkdir -p dist/${{ matrix.go_arch }}
+          mv libbox.aar libbox-legacy.aar dist/${{ matrix.go_arch }}
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      - name: Upload library
+        uses: actions/upload-artifact@v4
+        with:
+          name: libbox-android-${{ matrix.go_arch }}
+          path: dist
+          compression-level: 0
+
+  build-apk:
+    name: Build MENAR VPN APK
+    runs-on: ubuntu-latest
+    needs: build-libbox
+
+    steps:
+      - name: Checkout MENAR VPN
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Install Android SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Download libbox artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: libbox-android-*
+          path: libbox-inputs
+          merge-multiple: true
+
+      - name: Merge libbox libraries
+        run: |
+          git clone --depth 1 --branch v1.15.0-alpha.8 https://github.com/reF1nd/sing-box.git sing-box
+          cd sing-box
+          go run ./cmd/internal/merge_aar -output ../libbox.aar ../libbox-inputs/*/libbox.aar
+          go run ./cmd/internal/merge_aar -output ../libbox-legacy.aar ../libbox-inputs/*/libbox-legacy.aar
+
+      - name: Prepare libbox
+        run: |
+          mkdir -p app/libs
+          cp libbox.aar libbox-legacy.aar app/libs/
+
+      - name: Build APK
+        run: gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: menar-vpn-apk
+          path: app/build/outputs/apk/debug/app-debug.apk

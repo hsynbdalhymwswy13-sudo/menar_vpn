@@ -14,7 +14,6 @@ plugins {
     id("com.google.devtools.ksp")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
-    id("com.github.triplet.play")
     alias(libs.plugins.spotless)
 }
 
@@ -59,7 +58,11 @@ fun getVersionProps(propName: String): String {
 
 android {
     namespace = "io.nekohasekai.sfa"
-    compileSdk = 35
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 0
+        }
+    }
     buildToolsVersion = "35.0.0"
 
     ndkVersion = "28.0.13004108"
@@ -182,6 +185,8 @@ android {
 }
 
 dependencies {
+    implementation(enforcedPlatform("androidx.compose:compose-bom:2026.06.01"))
+
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     // libbox
@@ -303,7 +308,7 @@ dependencies {
     "otherLegacyImplementation"("com.github.topjohnwu.libsu:service:$libsuVersion")
 
     // Compose dependencies - API 24+ (play/other)
-    val composeBom24 = platform("androidx.compose:compose-bom:2026.06.01")
+    val composeBom24 = enforcedPlatform("androidx.compose:compose-bom:2026.06.01")
     val activityVersion24 = "1.13.0"
     val lifecycleComposeVersion24 = "2.11.0"
 
@@ -330,7 +335,7 @@ dependencies {
     "otherImplementation"("androidx.compose.runtime:runtime-livedata")
 
     // Compose dependencies - API 21 (otherLegacy)
-    val composeBom21 = platform("androidx.compose:compose-bom:2025.01.00")
+    val composeBom21 = enforcedPlatform("androidx.compose:compose-bom:2026.06.01")
     val activityVersion21 = "1.11.0"
     val lifecycleComposeVersion21 = "2.9.4"
 
@@ -371,22 +376,6 @@ dependencies {
     compileOnly(project(":libxposed-api"))
 }
 
-val playCredentialsJSON = rootProject.file("service-account-credentials.json")
-if (playCredentialsJSON.exists()) {
-    play {
-        serviceAccountCredentials.set(playCredentialsJSON)
-        defaultToAppBundles.set(true)
-        val version = getVersionProps("VERSION_NAME")
-        track.set(
-            if (version.contains("alpha") || version.contains("beta")/* || version.contains("rc")*/) {
-                "beta"
-            } else {
-                "production"
-            }
-        )
-    }
-}
-
 tasks.withType<KotlinCompile>().configureEach {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
@@ -411,3 +400,42 @@ spotless {
         googleJavaFormat()
     }
 }
+
+// Menar VPN: use locally available AndroidX Window version
+configurations.configureEach {
+    resolutionStrategy.force("androidx.window:window:1.4.0")
+    resolutionStrategy.force("androidx.window:window-core:1.4.0")
+    resolutionStrategy.force("androidx.window:window-core-android:1.4.0")
+}
+
+
+// Menar VPN: automatic AndroidX local fallback
+// Prefer versions that are actually available in the local Maven repository.
+configurations.configureEach {
+    resolutionStrategy.eachDependency {
+        val g = requested.group ?: return@eachDependency
+        if (g.startsWith("androidx.")) {
+                    if (g == "androidx.compose" && requested.name == "compose-bom") return@eachDependency
+            val localRoot = file("${System.getProperty("user.home")}/agp-local-repo/${g.replace('.', '/')}/${requested.name}")
+            if (localRoot.isDirectory) {
+                val versions = localRoot.listFiles()
+                    ?.filter { it.isDirectory && it.name.matches(Regex("""\d+(\.\d+){1,3}([.-].*)?""")) }
+                    ?.map { it.name }
+                    ?.sortedWith(compareBy<String>(
+                        { it.substringBefore('-').split('.').joinToString("") { n -> n.padStart(6, '0') } },
+                        { it }
+                    ).reversed())
+                    ?: emptyList()
+
+                if (versions.isNotEmpty()) {
+                    val newest = versions.first()
+                    if (newest != requested.version) {
+                        useVersion(newest)
+                        because("Menar VPN: use locally available AndroidX version")
+                    }
+                }
+            }
+        }
+    }
+}
+
