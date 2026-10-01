@@ -10,6 +10,7 @@ pluginManagement {
         maven { url = uri("file:///data/data/com.termux/files/home/agp-local-repo") }
         maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
         maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://repo1.maven.org/maven2/") }
         maven { url = uri(System.getProperty("user.home") + "/agp-local-repo") }
         google()
         mavenCentral()
