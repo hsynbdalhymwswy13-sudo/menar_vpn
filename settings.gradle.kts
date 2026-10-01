@@ -3,7 +3,6 @@ pluginManagement {
         eachPlugin {
             if (requested.id.id == "com.android.application") useModule("com.android.tools.build:gradle:9.3.1")
             if (requested.id.id == "com.android.library") useModule("com.android.tools.build:gradle:9.3.1")
-              if (requested.id.id == "org.jetbrains.kotlin.plugin.serialization") useModule("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.10")
         }
     }
     repositories {
