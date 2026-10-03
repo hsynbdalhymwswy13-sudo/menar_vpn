@@ -108,8 +108,14 @@ jobs:
       - name: Build APK
         run: gradle assembleDebug
 
+      - name: Locate APK files
+        run: |
+          find app/build/outputs/apk -type f -name '*.apk' -print
+          test -n "$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)" || { echo 'ERROR: No APK files were generated'; exit 1; }
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: menar-vpn-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
