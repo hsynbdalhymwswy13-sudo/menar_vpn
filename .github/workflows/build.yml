@@ -117,5 +117,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: menar-vpn-apk
-          path: app/build/outputs/apk/**/*.apk
+          path: app/build/outputs/apk/otherLegacy/debug/*legacy-android-5-armeabi-v7a-debug.apk
           if-no-files-found: error
