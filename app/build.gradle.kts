@@ -12,7 +12,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.parcelize")
     id("com.google.devtools.ksp")
-    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.10"
     id("org.jetbrains.kotlin.plugin.serialization")
     alias(libs.plugins.spotless)
 }
@@ -335,7 +335,7 @@ dependencies {
     "otherImplementation"("androidx.compose.runtime:runtime-livedata")
 
     // Compose dependencies - API 21 (otherLegacy)
-    val composeBom21 = enforcedPlatform("androidx.compose:compose-bom:2026.06.01")
+    val composeBom21 = platform("androidx.compose:compose-bom:2025.01.00")
     val activityVersion21 = "1.11.0"
     val lifecycleComposeVersion21 = "2.9.4"
 
