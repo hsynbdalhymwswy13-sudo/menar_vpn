@@ -115,7 +115,7 @@ android {
         create("play")
         create("other")
         create("otherLegacy") {
-            minSdk = 21
+            minSdk = 23
         }
     }
 
