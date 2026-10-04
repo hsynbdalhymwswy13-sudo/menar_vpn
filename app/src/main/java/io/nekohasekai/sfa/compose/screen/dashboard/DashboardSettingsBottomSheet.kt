@@ -164,6 +164,7 @@ fun DashboardSettingsBottomSheet(
                                 CardGroup.Connections,
                                 CardGroup.SystemProxy,
                                 CardGroup.ClashMode,
+                                CardGroup.Ping,
                                 CardGroup.Profiles,
                             )
                         val allCardsEnabled =
@@ -174,6 +175,7 @@ fun DashboardSettingsBottomSheet(
                                 CardGroup.Debug,
                                 CardGroup.Connections,
                                 CardGroup.SystemProxy,
+                                CardGroup.Ping,
                                 CardGroup.Profiles,
                             )
                         reorderedList = defaultOrder
@@ -386,6 +388,7 @@ fun DashboardItemCard(
                     CardGroup.UploadTraffic -> Icons.Outlined.Upload
                     CardGroup.DownloadTraffic -> Icons.Outlined.Download
                     CardGroup.ClashMode -> Icons.Outlined.Route
+                    CardGroup.Ping -> Icons.Outlined.SettingsEthernet
                     CardGroup.SystemProxy -> Icons.Outlined.SettingsEthernet
                     CardGroup.Profiles -> Icons.Outlined.Person
                 },
@@ -417,6 +420,7 @@ fun DashboardItemCard(
                         CardGroup.UploadTraffic -> stringResource(R.string.upload)
                         CardGroup.DownloadTraffic -> stringResource(R.string.download)
                         CardGroup.ClashMode -> stringResource(R.string.clash_mode)
+        CardGroup.Ping -> stringResource(R.string.stun_latency)
                         CardGroup.SystemProxy -> stringResource(R.string.system_proxy)
                         CardGroup.Profiles -> stringResource(R.string.title_configuration)
                     },

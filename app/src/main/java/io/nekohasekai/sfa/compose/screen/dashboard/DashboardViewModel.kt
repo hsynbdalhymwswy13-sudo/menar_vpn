@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.OutboundGroup
 import io.nekohasekai.libbox.StatusMessage
+import io.nekohasekai.sfa.compose.model.Group
 import io.nekohasekai.sfa.bg.BoxService
 import io.nekohasekai.sfa.compose.base.BaseViewModel
 import io.nekohasekai.sfa.compose.base.UiEvent
@@ -34,6 +35,7 @@ import java.util.Date
 
 enum class CardGroup(val pairGroup: CardPairGroup? = null) {
     ClashMode,
+    Ping,
     UploadTraffic(CardPairGroup.Traffic),
     DownloadTraffic(CardPairGroup.Traffic),
     Debug(CardPairGroup.Statistics),
@@ -55,6 +57,7 @@ data class DashboardUiState(
     val isLoading: Boolean = false,
     val hasGroups: Boolean = false,
     val groupsCount: Int = 0,
+    val groups: List<Group> = emptyList(),
     val connectionsCount: Int = 0,
     val serviceStartTime: Long? = null,
     val deprecatedNotes: List<DeprecatedNote> = emptyList(),
@@ -89,6 +92,7 @@ data class DashboardUiState(
     val visibleCards: Set<CardGroup> =
         setOf(
             CardGroup.ClashMode,
+        CardGroup.Ping,
             CardGroup.UploadTraffic,
             CardGroup.DownloadTraffic,
             CardGroup.Debug,
@@ -104,6 +108,7 @@ data class DashboardUiState(
             CardGroup.Connections,
             CardGroup.SystemProxy,
             CardGroup.ClashMode,
+        CardGroup.Ping,
             CardGroup.Profiles,
         ),
     val showCardSettingsDialog: Boolean = false,
@@ -653,7 +658,21 @@ class DashboardViewModel :
         viewModelScope.launch(Dispatchers.Main) {
             val hasGroups = newGroups.isNotEmpty()
             updateState {
-                copy(hasGroups = hasGroups, groupsCount = newGroups.size)
+                copy(hasGroups = hasGroups, groupsCount = newGroups.size, groups = newGroups.map { Group(it) })
+            }
+        }
+    }
+
+    fun refreshPing() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                uiState.value.groups
+                    .filter { it.selectable && it.selected.isNotBlank() }
+                    .forEach { group ->
+                        CommandTarget.standaloneClient().urlTest(group.tag)
+                    }
+            } catch (e: Exception) {
+                sendError(e)
             }
         }
     }
@@ -721,6 +740,7 @@ class DashboardViewModel :
         CardGroup.Connections,
         CardGroup.SystemProxy,
         CardGroup.ClashMode,
+        CardGroup.Ping,
         CardGroup.Profiles,
     )
 

@@ -14,6 +14,7 @@ fun DashboardCardRenderer(
     serviceStatus: Status = Status.Stopped,
     onClashModeSelected: (String) -> Unit,
     onSystemProxyToggle: (Boolean) -> Unit,
+    onPingRefresh: () -> Unit = {},
     // Profile card specific props
     profiles: List<Profile> = emptyList(),
     selectedProfileId: Long = -1L,
@@ -44,6 +45,16 @@ fun DashboardCardRenderer(
                     modes = uiState.clashModes,
                     selectedMode = uiState.selectedClashMode,
                     onModeSelected = onClashModeSelected,
+                    modifier = modifier,
+                )
+            }
+        }
+
+        CardGroup.Ping -> {
+            if (uiState.hasGroups) {
+                PingCard(
+                    groups = uiState.groups,
+                    onRefresh = onPingRefresh,
                     modifier = modifier,
                 )
             }

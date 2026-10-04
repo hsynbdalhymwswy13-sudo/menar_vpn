@@ -93,6 +93,7 @@ fun ServiceSettingsScreen(
     val scope = rememberCoroutineScope()
     var isBatteryOptimizationIgnored by remember { mutableStateOf(false) }
     var allowBypass by remember { mutableStateOf(Settings.allowBypass) }
+    var autoConnectEnabled by remember { mutableStateOf(Settings.autoConnectEnabled) }
     val notifyApplyChange = rememberApplyServiceChangeNotifier(serviceStatus)
     val requestBatteryOptimizationLauncher =
         rememberLauncherForActivityResult(
@@ -280,6 +281,54 @@ fun ServiceSettingsScreen(
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)),
                 colors =
                 ListItemDefaults.colors(
+                    containerColor = Color.Transparent,
+                ),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "MENAR",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
+        )
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            ),
+        ) {
+            ListItem(
+                headlineContent = {
+                    Text(
+                        "اتصال خودکار",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        "پس از راه‌اندازی مجدد دستگاه، MENAR VPN به‌صورت خودکار اجرا شود.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                trailingContent = {
+                    Switch(
+                        checked = autoConnectEnabled,
+                        onCheckedChange = { checked ->
+                            autoConnectEnabled = checked
+                            scope.launch(Dispatchers.IO) {
+                                Settings.autoConnectEnabled = checked
+                            }
+                        },
+                    )
+                },
+                modifier = Modifier.clip(RoundedCornerShape(12.dp)),
+                colors = ListItemDefaults.colors(
                     containerColor = Color.Transparent,
                 ),
             )

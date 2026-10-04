@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +40,7 @@ import io.nekohasekai.sfa.R
 import io.nekohasekai.sfa.compose.component.RemoteControlMenuItems
 import io.nekohasekai.sfa.compose.component.rememberRemoteServers
 import io.nekohasekai.sfa.compose.navigation.NewProfileArgs
+import io.nekohasekai.sfa.compose.menar.MenarConnectionCard
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
 import io.nekohasekai.sfa.compose.topbar.OverrideTopBar
 import io.nekohasekai.sfa.constant.Status
@@ -57,6 +59,11 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    LaunchedEffect(serviceStatus, uiState.hasGroups) {
+        if (serviceStatus == Status.Started && uiState.hasGroups) {
+            viewModel.refreshPing()
+        }
+    }
     val remoteServer by RemoteControlManager.remoteServer.collectAsState()
     val remoteConnected by RemoteControlManager.isConnected.collectAsState()
     val isRemote = remoteServer != null
@@ -153,6 +160,18 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(bottom = bottomPadding),
         ) {
+            item {
+                MenarConnectionCard(
+                    status = serviceStatus,
+                    profileName = uiState.selectedProfileName,
+                    uplink = uiState.uplink,
+                    downlink = uiState.downlink,
+                    uplinkTotal = uiState.uplinkTotal,
+                    downlinkTotal = uiState.downlinkTotal,
+                    connectionsCount = uiState.connectionsCount,
+                    onToggle = { viewModel.toggleService() },
+                )
+            }
             // Dynamic dashboard cards
             // Show cards when service is running OR if it's the Profiles card (always available)
             val serviceRunning = uiState.isStatusVisible
@@ -195,6 +214,7 @@ fun DashboardScreen(
                                 uiState = uiState,
                                 onClashModeSelected = viewModel::selectClashMode,
                                 onSystemProxyToggle = viewModel::toggleSystemProxy,
+                onPingRefresh = viewModel::refreshPing,
                                 // Profile card specific props
                                 profiles = uiState.profiles,
                                 selectedProfileId = uiState.selectedProfileId,
@@ -232,6 +252,7 @@ fun DashboardScreen(
                             serviceStatus = serviceStatus,
                             onClashModeSelected = viewModel::selectClashMode,
                             onSystemProxyToggle = viewModel::toggleSystemProxy,
+                onPingRefresh = viewModel::refreshPing,
                             // Profile card specific props
                             profiles = uiState.profiles,
                             selectedProfileId = uiState.selectedProfileId,
@@ -311,6 +332,7 @@ fun isCardAvailableWhenServiceRunning(cardGroup: CardGroup, uiState: DashboardUi
     CardGroup.DownloadTraffic -> uiState.trafficVisible
     CardGroup.Debug -> true // Debug info is always available when service is running
     CardGroup.Connections -> uiState.trafficVisible
+    CardGroup.Ping -> uiState.hasGroups
     CardGroup.SystemProxy -> uiState.systemProxyVisible
     CardGroup.Profiles -> true // This shouldn't be called for Profiles, but return true for safety
 }

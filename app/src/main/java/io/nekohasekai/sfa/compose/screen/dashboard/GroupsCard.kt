@@ -570,42 +570,70 @@ private fun ProxyChip(
     modifier: Modifier = Modifier,
 ) {
     var showContextMenu by remember { mutableStateOf(false) }
-    val chipShape = RoundedCornerShape(12.dp)
+
+    val chipShape = RoundedCornerShape(14.dp)
+    val accentRed = Color(0xFFE53935)
+
+    val backgroundColor =
+        if (isSelected) {
+            if (isSystemInDarkTheme()) {
+                Color(0xFF291417)
+            } else {
+                Color(0xFFFFEBEE)
+            }
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        }
+
+    val titleColor =
+        if (isSelected) {
+            accentRed
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
+
+    val typeColor =
+        if (isSelected) {
+            accentRed.copy(alpha = 0.72f)
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+
+    val delayColor = palette.forDelay(item.urlTestDelay)
+
     Box(modifier = modifier) {
         Surface(
-            modifier =
-            Modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .clip(chipShape)
                 .combinedClickable(
-                    onClick = { if (isSelectable) onClick() },
-                    onLongClick = { showContextMenu = true },
+                    onClick = {
+                        if (isSelectable) onClick()
+                    },
+                    onLongClick = {
+                        showContextMenu = true
+                    },
                 ),
             shape = chipShape,
-            color =
-            if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
+            color = backgroundColor,
+            tonalElevation = if (isSelected) 3.dp else 1.dp,
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.padding(
+                    horizontal = 13.dp,
+                    vertical = 11.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Text(
                     text = item.tag,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color =
-                    if (isSelected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
+                    fontWeight = FontWeight.Bold,
+                    color = titleColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -614,31 +642,64 @@ private fun ProxyChip(
                     Text(
                         text = item.displayType,
                         style = MaterialTheme.typography.labelSmall,
-                        color =
-                        if (isSelected) {
-                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        color = typeColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
+
                     if (item.urlTestDelay > 0) {
-                        Text(
-                            text = "${item.urlTestDelay}ms",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = palette.forDelay(item.urlTestDelay),
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = delayColor.copy(alpha = 0.14f),
+                        ) {
+                            Text(
+                                text = "${item.urlTestDelay}ms",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = delayColor,
+                                modifier = Modifier.padding(
+                                    horizontal = 7.dp,
+                                    vertical = 3.dp,
+                                ),
+                            )
+                        }
                     }
                 }
             }
         }
+
+        if (isSelected) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp),
+                shape = RoundedCornerShape(999.dp),
+                color = accentRed,
+            ) {
+                Text(
+                    text = "✓",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(
+                        horizontal = 6.dp,
+                        vertical = 2.dp,
+                    ),
+                )
+            }
+        }
+
         if (showContextMenu) {
             DropdownMenu(
                 expanded = true,
-                onDismissRequest = { showContextMenu = false },
+                onDismissRequest = {
+                    showContextMenu = false
+                },
             ) {
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.url_test)) },
+                    text = {
+                        Text(stringResource(R.string.url_test))
+                    },
                     leadingIcon = {
                         Icon(
                             Icons.Default.Speed,

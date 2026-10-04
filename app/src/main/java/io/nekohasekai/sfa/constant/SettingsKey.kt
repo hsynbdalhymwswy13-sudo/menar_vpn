@@ -61,6 +61,7 @@ object SettingsKey {
     const val TAILSCALE_SSH_FONT_FOLLOW_THEME = "tailscale_ssh_font_follow_theme"
 
     // cache
+    const val AUTO_CONNECT_ENABLED = "auto_connect_enabled"
     const val STARTED_BY_USER = "started_by_user"
     const val CACHED_UPDATE_INFO = "cached_update_info"
     const val CACHED_APK_PATH = "cached_apk_path"
