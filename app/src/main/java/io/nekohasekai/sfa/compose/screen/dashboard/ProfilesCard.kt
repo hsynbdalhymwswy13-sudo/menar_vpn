@@ -1,5 +1,6 @@
 package io.nekohasekai.sfa.compose.screen.dashboard
 
+import android.content.ClipboardManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.Edit
@@ -43,6 +45,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -120,8 +123,11 @@ fun ProfilesCard(
     var pendingImportName by remember { mutableStateOf<String?>(null) }
     var pendingQrsData by remember { mutableStateOf<ByteArray?>(null) }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingImportText by remember { mutableStateOf<String?>(null) }
 
     var showQRScanSheet by remember { mutableStateOf(false) }
+    var showLinkImportDialog by remember { mutableStateOf(false) }
+    var linkImportText by remember { mutableStateOf("") }
 
     val importFromFileLauncher =
         rememberLauncherForActivityResult(
@@ -146,6 +152,50 @@ fun ProfilesCard(
                 }
             }
         }
+
+    fun importFromClipboard() {
+        val clipboard = context.getSystemService(ClipboardManager::class.java)
+        val text = clipboard?.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
+
+        if (text.isNullOrEmpty()) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.toast_clipboard_empty),
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+
+        coroutineScope.launch {
+            when (val parseResult = importHandler.parseQRCode(text)) {
+                is ProfileImportHandler.QRCodeParseResult.RemoteProfile -> {
+                    withContext(Dispatchers.Main) {
+                        pendingImportName = parseResult.name
+                        pendingImportText = text
+                        pendingImportUri = null
+                        pendingQrsData = null
+                        showImportConfirmDialog = true
+                    }
+                }
+
+                is ProfileImportHandler.QRCodeParseResult.LocalProfile -> {
+                    withContext(Dispatchers.Main) {
+                        pendingImportName = parseResult.name
+                        pendingImportText = text
+                        pendingImportUri = null
+                        pendingQrsData = null
+                        showImportConfirmDialog = true
+                    }
+                }
+
+                is ProfileImportHandler.QRCodeParseResult.Error -> {
+                    withContext(Dispatchers.Main) {
+                        context.errorDialogBuilder(Exception(parseResult.message)).show()
+                    }
+                }
+            }
+        }
+    }
 
     val saveFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -414,6 +464,47 @@ fun ProfilesCard(
                 ListItem(
                     modifier = Modifier.clickable {
                         onHideAddProfileSheet()
+                        importFromClipboard()
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    },
+                    headlineContent = {
+                        Text("چسباندن از کلیپ‌بورد")
+                    },
+                    supportingContent = {
+                        Text("وارد کردن لینک یا کانفیگ کپی‌شده")
+                    },
+                )
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        onHideAddProfileSheet()
+                        linkImportText = ""
+                        showLinkImportDialog = true
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    },
+                    headlineContent = {
+                        Text("افزودن از لینک")
+                    },
+                    supportingContent = {
+                        Text("وارد کردن آدرس اشتراک یا پروفایل Remote")
+                    },
+                )
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        onHideAddProfileSheet()
                         showQRScanSheet = true
                     },
                     leadingContent = {
@@ -486,6 +577,64 @@ fun ProfilesCard(
         )
     }
 
+    if (showLinkImportDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showLinkImportDialog = false
+                linkImportText = ""
+            },
+            title = {
+                Text("افزودن از لینک")
+            },
+            text = {
+                OutlinedTextField(
+                    value = linkImportText,
+                    onValueChange = { linkImportText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("آدرس لینک") },
+                    placeholder = { Text("https://... یا sing-box://...") },
+                )
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showLinkImportDialog = false
+                        linkImportText = ""
+                    },
+                ) {
+                    Text("لغو")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = linkImportText.trim().isNotEmpty(),
+                    onClick = {
+                        val text = linkImportText.trim()
+                        showLinkImportDialog = false
+                        linkImportText = ""
+                        coroutineScope.launch {
+                            when (val result = importHandler.importFromQRCode(text)) {
+                                is ProfileImportHandler.ImportResult.Success -> {
+                                    withContext(Dispatchers.Main) {
+                                        onProfileEdit(result.profile)
+                                    }
+                                }
+                                is ProfileImportHandler.ImportResult.Error -> {
+                                    withContext(Dispatchers.Main) {
+                                        context.errorDialogBuilder(Exception(result.message)).show()
+                                    }
+                                }
+                            }
+                        }
+                    },
+                ) {
+                    Text("افزودن")
+                }
+            },
+        )
+    }
+
     if (showImportConfirmDialog && pendingImportName != null) {
         AlertDialog(
             onDismissRequest = {
@@ -493,6 +642,7 @@ fun ProfilesCard(
                 pendingImportName = null
                 pendingQrsData = null
                 pendingImportUri = null
+                pendingImportText = null
             },
             title = { Text(stringResource(R.string.import_profile_confirm_title)) },
             text = { Text(stringResource(R.string.import_profile_confirm_message, pendingImportName!!)) },
@@ -502,12 +652,27 @@ fun ProfilesCard(
                         showImportConfirmDialog = false
                         val qrsData = pendingQrsData
                         val importUri = pendingImportUri
+                        val importText = pendingImportText
                         pendingImportName = null
                         pendingQrsData = null
                         pendingImportUri = null
+                        pendingImportText = null
                         coroutineScope.launch {
                             if (qrsData != null) {
                                 when (val result = importHandler.importFromQRSData(qrsData)) {
+                                    is ProfileImportHandler.ImportResult.Success -> {
+                                        withContext(Dispatchers.Main) {
+                                            onProfileEdit(result.profile)
+                                        }
+                                    }
+                                    is ProfileImportHandler.ImportResult.Error -> {
+                                        withContext(Dispatchers.Main) {
+                                            context.errorDialogBuilder(Exception(result.message)).show()
+                                        }
+                                    }
+                                }
+                            } else if (importText != null) {
+                                when (val result = importHandler.importFromQRCode(importText)) {
                                     is ProfileImportHandler.ImportResult.Success -> {
                                         withContext(Dispatchers.Main) {
                                             onProfileEdit(result.profile)

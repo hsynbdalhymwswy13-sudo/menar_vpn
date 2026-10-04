@@ -43,6 +43,8 @@ object SettingsKey {
     // dashboard
     const val DASHBOARD_ITEM_ORDER = "dashboard_item_order"
     const val DASHBOARD_DISABLED_ITEMS = "dashboard_disabled_items"
+    const val AUTO_BEST_SERVER_ENABLED = "auto_best_server_enabled"
+    const val AUTO_CONFIG_SOURCE_URL = "auto_config_source_url"
 
     // Remote Control
     const val ACTIVE_REMOTE_SERVER_ID = "active_remote_server_id"

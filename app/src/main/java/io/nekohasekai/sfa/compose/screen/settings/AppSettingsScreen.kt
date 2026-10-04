@@ -54,6 +54,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -95,9 +96,11 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.navigation.NavController
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.sfa.Application
+import io.nekohasekai.sfa.bg.AutoConfigSource
 import io.nekohasekai.sfa.BuildConfig
 import io.nekohasekai.sfa.R
 import io.nekohasekai.sfa.compose.base.UiEvent
+import io.nekohasekai.sfa.compose.base.GlobalEventBus
 import io.nekohasekai.sfa.compose.base.rememberApplyServiceChangeNotifier
 import io.nekohasekai.sfa.compose.component.UpdateAvailableDialog
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
@@ -142,6 +145,9 @@ fun AppSettingsScreen(
     }
 
     val context = LocalContext.current
+    var autoBestServerEnabled by remember { mutableStateOf(Settings.autoBestServerEnabled) }
+    var autoConfigSourceUrl by remember { mutableStateOf(Settings.autoConfigSourceUrl) }
+    var isFetchingAutoConfig by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val hasUpdate by UpdateState.hasUpdate
     val updateInfo by UpdateState.updateInfo
@@ -783,13 +789,112 @@ fun AppSettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = stringResource(R.string.update_settings),
+            text = "اتصال و سرورها",
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
         )
 
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            ),
+        ) {
+            ListItem(
+                headlineContent = {
+                    Text(
+                        "انتخاب خودکار بهترین سرور",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        if (autoBestServerEnabled) {
+                            "پس از تست تأخیر، بهترین سرور انتخاب می‌شود"
+                        } else {
+                            "انتخاب سرور به‌صورت دستی انجام می‌شود"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.Outlined.Speed,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                trailingContent = {
+                    Switch(
+                        checked = autoBestServerEnabled,
+                        onCheckedChange = { checked ->
+                            autoBestServerEnabled = checked; Settings.autoBestServerEnabled = checked; GlobalEventBus.tryEmit(UiEvent.AutoBestServerChanged(checked))
+                        },
+                    )
+                },
+                modifier = Modifier.clip(RoundedCornerShape(12.dp)),
+                colors = ListItemDefaults.colors(
+                    containerColor = Color.Transparent,
+                ),
+            )
+        }
+
+        OutlinedTextField(
+            value = autoConfigSourceUrl,
+            onValueChange = {
+                autoConfigSourceUrl = it
+                Settings.autoConfigSourceUrl = it.trim()
+            },
+            label = { Text("نشانی منبع کانفیگ") },
+            supportingText = {
+                Text("نشانی معتبر منبع کانفیگ را وارد کنید؛ خالی گذاشتن آن مجاز است.")
+            },
+            placeholder = { Text("https://…") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+        )
+
+          Button(
+              onClick = {
+                  if (isFetchingAutoConfig) return@Button
+                  isFetchingAutoConfig = true
+                  scope.launch {
+                      try {
+                          val name = withContext(Dispatchers.IO) {
+                              AutoConfigSource.fetchAndActivate()
+                          }
+                          Toast.makeText(context, "کانفیگ دریافت و فعال شد: $name", Toast.LENGTH_LONG).show()
+                      } catch (e: Exception) {
+                          Toast.makeText(context, "خطا در دریافت کانفیگ: ${e.message}", Toast.LENGTH_LONG).show()
+                      } finally {
+                          isFetchingAutoConfig = false
+                      }
+                  }
+              },
+              enabled = !isFetchingAutoConfig && autoConfigSourceUrl.isNotBlank(),
+              modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+          ) {
+              if (isFetchingAutoConfig) {
+                  CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+              } else {
+                  Text("دریافت و فعال‌سازی کانفیگ")
+              }
+          }
+
+            Text(
+                text = stringResource(R.string.update_settings),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
+            )
         Card(
             modifier =
             Modifier

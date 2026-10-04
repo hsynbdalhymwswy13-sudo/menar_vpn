@@ -116,6 +116,8 @@ object Settings {
 
     var dashboardItemOrder by dataStore.string(SettingsKey.DASHBOARD_ITEM_ORDER) { "" }
     var dashboardDisabledItems by dataStore.stringSet(SettingsKey.DASHBOARD_DISABLED_ITEMS) { emptySet() }
+    var autoBestServerEnabled by dataStore.boolean(SettingsKey.AUTO_BEST_SERVER_ENABLED) { true }
+    var autoConfigSourceUrl by dataStore.string(SettingsKey.AUTO_CONFIG_SOURCE_URL) { "" }
 
     var activeRemoteServerId by dataStore.long(SettingsKey.ACTIVE_REMOTE_SERVER_ID) { 0L }
 

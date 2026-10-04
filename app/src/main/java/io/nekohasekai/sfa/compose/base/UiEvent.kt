@@ -20,6 +20,7 @@ sealed class UiEvent {
     object RequestStartService : UiEvent()
 
     object RequestReconnectService : UiEvent()
+    data class AutoBestServerChanged(val enabled: Boolean) : UiEvent()
 
     data class ApplyServiceChange(val mode: Mode) : UiEvent() {
         enum class Mode {

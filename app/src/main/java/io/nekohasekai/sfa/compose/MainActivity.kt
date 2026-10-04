@@ -1004,6 +1004,9 @@ class MainActivity :
                     is UiEvent.RequestReconnectService -> {
                         connection.reconnect()
                     }
+                    is UiEvent.AutoBestServerChanged -> {
+                        dashboardViewModel.setAutoBestServerEnabled(event.enabled)
+                    }
 
                     is UiEvent.EditProfile -> {
                         navController.navigate(ProfileRoutes.editProfile(event.profileId)) {

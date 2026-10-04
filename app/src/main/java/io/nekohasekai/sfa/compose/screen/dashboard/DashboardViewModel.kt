@@ -19,6 +19,8 @@ import io.nekohasekai.sfa.utils.CommandTarget
 import io.nekohasekai.sfa.utils.HTTPClient
 import io.nekohasekai.sfa.utils.RemoteControlManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -123,6 +125,9 @@ class DashboardViewModel :
     BaseViewModel<DashboardUiState, UiEvent>(),
     CommandClient.Handler {
     private val _serviceStatus = MutableStateFlow(Status.Stopped)
+    private var autoBestServerTesting = false
+    private var autoBestServerMonitorJob: Job? = null
+    private var autoBestServerFailoverJob: Job? = null
     val serviceStatus: StateFlow<Status> = _serviceStatus.asStateFlow()
 
     internal val commandClient =
@@ -473,9 +478,11 @@ class DashboardViewModel :
                 }
                 reloadSystemProxyStatus()
                 reloadStartedAt()
+                startAutoBestServerMonitor()
             }
 
             Status.Stopped -> {
+                stopAutoBestServerMonitor()
                 if (isRemote) {
                     return
                 }
@@ -504,6 +511,32 @@ class DashboardViewModel :
 
             else -> {}
         }
+    }
+
+    private fun startAutoBestServerMonitor() {
+        stopAutoBestServerMonitor()
+        if (!Settings.autoBestServerEnabled || _serviceStatus.value != Status.Started) return
+        autoBestServerMonitorJob = viewModelScope.launch(Dispatchers.IO) {
+            while (isActive && _serviceStatus.value == Status.Started) {
+                if (!autoBestServerTesting) {
+                    refreshPing()
+                }
+                kotlinx.coroutines.delay(3 * 60 * 1000L)
+            }
+        }
+    }
+
+    fun setAutoBestServerEnabled(enabled: Boolean) {
+        if (enabled) {
+            startAutoBestServerMonitor()
+        } else {
+            stopAutoBestServerMonitor()
+        }
+    }
+
+    private fun stopAutoBestServerMonitor() {
+        autoBestServerMonitorJob?.cancel()
+        autoBestServerMonitorJob = null
     }
 
     private fun reloadStartedAt() {
@@ -587,6 +620,7 @@ class DashboardViewModel :
             if (RemoteControlManager.remoteServer.value == null && _serviceStatus.value == Status.Started) {
                 reloadSystemProxyStatus()
                 reloadStartedAt()
+                startAutoBestServerMonitor()
             }
         }
     }
@@ -657,9 +691,66 @@ class DashboardViewModel :
     override fun updateGroups(newGroups: MutableList<OutboundGroup>) {
         viewModelScope.launch(Dispatchers.Main) {
             val hasGroups = newGroups.isNotEmpty()
+            val updatedGroups = newGroups.map { Group(it) }
+
             updateState {
-                copy(hasGroups = hasGroups, groupsCount = newGroups.size, groups = newGroups.map { Group(it) })
+                copy(
+                    hasGroups = hasGroups,
+                    groupsCount = newGroups.size,
+                    groups = updatedGroups,
+                )
             }
+
+            if (hasGroups && Settings.autoBestServerEnabled) {
+                val currentServerFailed = updatedGroups
+                    .filter { it.selectable }
+                    .any { group ->
+                        group.selected.isNotBlank() &&
+                            group.items.find { it.tag == group.selected }?.urlTestDelay?.let { it <= 0 } == true
+                    }
+
+                if (currentServerFailed && autoBestServerFailoverJob?.isActive != true) {
+                    autoBestServerFailoverJob = viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            selectBestServers()
+                        } finally {
+                            autoBestServerFailoverJob = null
+                        }
+                    }
+                } else if (!autoBestServerTesting) {
+                    autoBestServerTesting = true
+                    refreshPing()
+                }
+            }
+        }
+    }
+
+    private suspend fun selectBestServers() {
+        if (!Settings.autoBestServerEnabled) return
+
+        try {
+            uiState.value.groups
+                .filter { it.selectable }
+                .forEach { group ->
+                    val best = group.items
+                        .filter { it.urlTestDelay > 0 }
+                        .minByOrNull { it.urlTestDelay }
+
+                    val current = group.items
+                        .find { it.tag == group.selected }
+
+                    val shouldSwitch = when {
+                        best == null || best.tag == group.selected -> false
+                        current == null || current.urlTestDelay <= 0 -> true
+                        else -> best.urlTestDelay * 100 <= current.urlTestDelay * 80
+                    }
+
+                    if (shouldSwitch) {
+                        CommandTarget.standaloneClient().selectOutbound(group.tag, best!!.tag)
+                    }
+                }
+        } catch (e: Exception) {
+            sendError(e)
         }
     }
 
@@ -671,8 +762,12 @@ class DashboardViewModel :
                     .forEach { group ->
                         CommandTarget.standaloneClient().urlTest(group.tag)
                     }
+                delay(1500)
+                selectBestServers()
             } catch (e: Exception) {
                 sendError(e)
+            } finally {
+                autoBestServerTesting = false
             }
         }
     }
