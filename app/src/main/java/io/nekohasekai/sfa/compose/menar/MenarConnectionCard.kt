@@ -59,8 +59,8 @@ fun MenarConnectionCard(
         ),
     )
 
-    val accent = if (connected) Color(0xFFFF3344) else Color(0xFF9AA8B8)
-    val statusText = if (connected) "اتصال امن برقرار است" else "آماده اتصال"
+    val accent = if (connected) Color(0xFFFFC857) else Color(0xFF35D6C4)
+    val statusText = if (connected) "اتصال امن عقاب برقرار است" else "آماده اتصال"
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -88,7 +88,7 @@ fun MenarConnectionCard(
                 ) {
                     Image(
                         painter = painterResource(R.drawable.ic_menar_eagle),
-                        contentDescription = "MENAR",
+                        contentDescription = "EAGLE",
                         modifier = Modifier.size(48.dp),
                     )
                 }
@@ -99,7 +99,7 @@ fun MenarConnectionCard(
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(
-                        text = "MENAR",
+                        text = "EAGLE",
                         style = MaterialTheme.typography.titleLarge,
                         color = Color.White,
                     )
@@ -256,7 +256,7 @@ private fun MenarTraffic(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = Color(0xFFFF3344),
+                tint = Color(0xFFFFC857),
                 modifier = Modifier.size(19.dp),
             )
         }
