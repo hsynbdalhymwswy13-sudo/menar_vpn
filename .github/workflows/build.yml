@@ -22,7 +22,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '9.6.0'
 
       - name: Install Android SDK
         run: |
@@ -35,10 +35,10 @@ jobs:
           curl -L -o app/libs/libbox.aar https://github.com/singbox-android/libbox/releases/download/1.14.1/libbox.aar
 
       - name: Build APK
-        run: gradle assembleDebug
+        run: cd eagle-vpn && gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: menar-vpn-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: eagle-vpn/app/build/outputs/apk/debug/app-debug.apk
