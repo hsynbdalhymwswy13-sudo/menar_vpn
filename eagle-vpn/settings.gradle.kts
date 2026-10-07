@@ -1,14 +1,6 @@
 pluginManagement {
-    resolutionStrategy {
-        eachPlugin {
-            if (requested.id.id == "com.android.application") {
-                useModule("com.android.tools.build:gradle:9.3.1")
-            }
-        }
-    }
     repositories {
-        maven { url = uri("https://plugins.gradle.org/m2/") }
-        maven { url = uri("https://repo1.maven.org/maven2/") }
+        maven { url = uri(System.getProperty("user.home") + "/.gradle/eagle-maven") }
         google()
         mavenCentral()
         gradlePluginPortal()
@@ -18,8 +10,8 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        mavenCentral()
         google()
+        mavenCentral()
     }
 }
 

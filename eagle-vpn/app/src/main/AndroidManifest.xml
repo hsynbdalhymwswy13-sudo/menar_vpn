@@ -1,8 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <application
         android:theme="@style/Theme.Eagle"
         android:label="EAGLE VPN"
+        android:icon="@drawable/ic_eagle"
         android:allowBackup="false"
         android:supportsRtl="true">
 
@@ -15,6 +21,18 @@
             </intent-filter>
         </activity>
 
-    </application>
+        <service
+            android:name=".EagleVpnService"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="VPN tunnel service" />
+        </service>
 
+    </application>
 </manifest>
