@@ -11,15 +11,13 @@ import io.nekohasekai.libbox.CommandClient
 import io.nekohasekai.libbox.CommandClientHandler
 import io.nekohasekai.libbox.CommandClientOptions
 import io.nekohasekai.libbox.CommandServer
-import io.nekohasekai.libbox.CommandClient
-import io.nekohasekai.libbox.CommandClientHandler
-import io.nekohasekai.libbox.CommandClientOptions
 import io.nekohasekai.libbox.CommandServerHandler
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.OverrideOptions
 import io.nekohasekai.libbox.PlatformUser
 import io.nekohasekai.libbox.SetupOptions
 import io.nekohasekai.libbox.StatusMessage
+import io.nekohasekai.libbox.SystemProxyStatus
 import io.nekohasekai.libbox.Notification as BoxNotification
 import io.nekohasekai.libbox.ShellSession
 import io.nekohasekai.libbox.StringIterator
@@ -202,8 +200,12 @@ class EagleVpnService : VpnService() {
     }
 
     private class EagleCommandHandler : CommandServerHandler {
-        override fun connectSSHAgent() {}
-        override fun getSystemProxyStatus() = false
+        override fun connectSSHAgent(): Int = 0
+        override fun getSystemProxyStatus(): SystemProxyStatus =
+            SystemProxyStatus().apply {
+                available = false
+                enabled = false
+            }
         override fun serviceReload() {}
         override fun serviceStop() {}
         override fun setSystemProxyEnabled(isEnabled: Boolean) {}
