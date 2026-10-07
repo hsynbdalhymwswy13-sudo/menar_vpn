@@ -177,7 +177,7 @@ private fun EagleApp(onClipboard: () -> Unit, onQr: () -> Unit, onConnect: () ->
         modifier = Modifier.fillMaxSize()
     ) {
         Image(
-            painter = painterResource(id = com.eagle.vpn.R.drawable.eagle_background),
+            painter = painterResource(id = com.eagle.vpn.R.drawable.eagle_ui_reference),
             contentDescription = null,
             modifier = Modifier.fillMaxSize().alpha(0.18f),
             contentScale = ContentScale.Crop
