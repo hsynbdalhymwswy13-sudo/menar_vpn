@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -29,10 +31,11 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Download libbox
+      - name: Verify libbox
         run: |
-          mkdir -p app/libs
-          curl -L -o app/libs/libbox.aar https://github.com/singbox-android/libbox/releases/download/1.14.1/libbox.aar
+          test -f eagle-vpn/app/libs/libbox.aar
+          unzip -t eagle-vpn/app/libs/libbox.aar >/dev/null
+          ls -lh eagle-vpn/app/libs/libbox.aar
 
       - name: Build APK
         run: cd eagle-vpn && gradle assembleDebug
