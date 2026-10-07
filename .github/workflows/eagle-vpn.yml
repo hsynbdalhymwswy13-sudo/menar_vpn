@@ -31,7 +31,7 @@ jobs:
 
       - name: Build EAGLE VPN
         working-directory: eagle-vpn
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --stacktrace --info
 
       - name: Upload EAGLE APK
         uses: actions/upload-artifact@v4
