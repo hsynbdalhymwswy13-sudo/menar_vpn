@@ -38,8 +38,8 @@ jobs:
           ls -lh eagle-vpn/app/libs/libbox.aar
 
       - name: Build APK
-          env:
-            GRADLE_OPTS: "-Xmx6g -Dfile.encoding=UTF-8"
+        env:
+          GRADLE_OPTS: "-Xmx6g -Dfile.encoding=UTF-8"
         run: cd eagle-vpn && gradle assembleDebug --stacktrace --info
 
       - name: Upload APK
