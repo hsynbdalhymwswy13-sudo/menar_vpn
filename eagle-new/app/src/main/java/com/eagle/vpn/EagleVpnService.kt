@@ -28,7 +28,7 @@ class EagleVpnService : VpnService(), CommandServerHandler {
                     createNotificationChannel()
                     startForeground(NOTIFICATION_ID, buildNotification())
                     startEngine()
-                    sendStatus("CONNECTED")
+                    sendStatus("ENGINE_STARTED", "VPN engine started; remote connectivity is not verified")
                 } catch (e: Exception) {
                     android.util.Log.e(TAG, "Unable to start libbox", e)
                     sendStatus("ERROR", e.message ?: "Unknown service error")
@@ -95,11 +95,11 @@ class EagleVpnService : VpnService(), CommandServerHandler {
         if (commandServer != null) return
 
         val configFile = File(filesDir, "config.json")
-        if (!configFile.exists()) {
-            configFile.writeText(
-                """{"log":{"level":"info"},"inbounds":[{"type":"tun","tag":"eagle-tun","interface_name":"eagle0","address":["172.19.0.1/30"],"mtu":1500,"auto_route":true,"strict_route":true,"stack":"system"}],"outbounds":[{"type":"direct","tag":"direct"}],"route":{"auto_detect_interface":true}}"""
-            )
+        val importedFlag = File(filesDir, "profile-imported.flag")
+        if (!configFile.isFile || !importedFlag.isFile) {
+            throw IllegalStateException("Import a valid sing-box JSON profile before connecting")
         }
+        Libbox.checkConfig(configFile.readText())
 
         val setup = SetupOptions().apply {
             basePath = filesDir.absolutePath

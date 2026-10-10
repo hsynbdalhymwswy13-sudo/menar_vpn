@@ -5,6 +5,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.ClipboardManager
+import java.io.File
+import io.nekohasekai.libbox.Libbox
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
@@ -28,6 +33,11 @@ import androidx.compose.ui.unit.sp
 
 class MainActivity : ComponentActivity() {
     private val connectionState = mutableStateOf("READY")
+    private val profileState = mutableStateOf("No profile imported")
+    private lateinit var filePicker: ActivityResultLauncher<Array<String>>
+    private val qrScanner = registerForActivityResult(ScanContract()) { result ->
+        if (result.contents != null) importConfig(result.contents)
+    }
     private lateinit var vpnPermissionLauncher: ActivityResultLauncher<Intent>
 
     private val statusReceiver = object : BroadcastReceiver() {
@@ -42,6 +52,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        filePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) try { contentResolver.openInputStream(uri)?.bufferedReader()?.use { importConfig(it.readText()) } } catch (e: Exception) { android.widget.Toast.makeText(this, "Could not read selected file", android.widget.Toast.LENGTH_LONG).show() }
+        }
+        profileState.value = if (File(filesDir, "profile-imported.flag").isFile && File(filesDir, "config.json").isFile) "Profile imported" else "No profile imported"
         vpnPermissionLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
                 if (result.resultCode == Activity.RESULT_OK) {
@@ -55,7 +69,11 @@ class MainActivity : ComponentActivity() {
             EagleHome(
                 status = connectionState.value,
                 onConnect = { requestVpnPermission() },
-                onDisconnect = { stopVpnService() }
+                onDisconnect = { stopVpnService() },
+            profile = profileState.value,
+            onImportFile = { filePicker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
+            onPaste = { pasteConfig() },
+            onScanQr = { qrScanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("Scan sing-box JSON QR").setBeepEnabled(false).setOrientationLocked(false)) }
             )
         }
     }
@@ -82,7 +100,39 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
+    private fun importConfig(raw: String) {
+        try {
+            require(raw.trimStart().startsWith("{")) { "Only sing-box JSON profiles are supported" }
+            Libbox.checkConfig(raw)
+            val target = File(filesDir, "config.json")
+            val temp = File(filesDir, "config.json.tmp")
+            temp.writeText(raw)
+            check(temp.renameTo(target)) { "Could not save profile" }
+            File(filesDir, "profile-imported.flag").writeText("ok")
+            profileState.value = "Profile imported and validated"
+            android.widget.Toast.makeText(this, "Config imported successfully", android.widget.Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            profileState.value = "Import failed: ${e.message ?: "Invalid config"}"
+            android.widget.Toast.makeText(this, profileState.value, android.widget.Toast.LENGTH_LONG).show()
+            android.util.Log.e("MainActivity", "Config import failed", e)
+        }
+    }
+
+    private fun pasteConfig() {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val raw = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
+        if (raw.isNullOrBlank()) {
+            android.widget.Toast.makeText(this, "Clipboard is empty", android.widget.Toast.LENGTH_LONG).show()
+        } else importConfig(raw)
+    }
+
     private fun requestVpnPermission() {
+        if (!File(filesDir, "config.json").isFile || !File(filesDir, "profile-imported.flag").isFile) {
+            connectionState.value = "IMPORT CONFIG FIRST"
+            android.widget.Toast.makeText(this, "Import a valid sing-box JSON profile first", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+
         val prepareIntent = VpnService.prepare(this)
         if (prepareIntent == null) {
             startVpnService()
@@ -120,9 +170,13 @@ class MainActivity : ComponentActivity() {
 fun EagleHome(
     status: String,
     onConnect: () -> Unit,
-    onDisconnect: () -> Unit
+    onDisconnect: () -> Unit,
+    profile: String,
+    onImportFile: () -> Unit,
+    onPaste: () -> Unit,
+    onScanQr: () -> Unit
 ) {
-    val connected = status == "CONNECTED"
+    val connected = status == "CONNECTED" || status == "ENGINE_STARTED"
     val busy = status == "CONNECTING" || status == "DISCONNECTING"
 
     val background = Brush.verticalGradient(
@@ -209,7 +263,17 @@ fun EagleHome(
                 }
             }
 
-            Spacer(Modifier.height(30.dp))
+            Spacer(Modifier.height(14.dp))
+            Text(profile, color = if (profile.startsWith("Profile imported")) Color(0xFF65E6A5) else Color(0xFFFF7070), fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(onClick = onImportFile, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF252532))) { Text("IMPORT FILE", fontSize = 9.sp) }
+                Button(onClick = onPaste, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF252532))) { Text("PASTE", fontSize = 9.sp) }
+                Button(onClick = onScanQr, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B0000))) { Text("SCAN QR", fontSize = 9.sp) }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("Sing-box JSON only • Server reachability is not guaranteed", color = Color.White.copy(alpha = .55f), fontSize = 10.sp)
+            Spacer(Modifier.height(16.dp))
 
             Text(
                 status,
