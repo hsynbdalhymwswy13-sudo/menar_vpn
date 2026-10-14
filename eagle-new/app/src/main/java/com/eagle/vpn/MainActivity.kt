@@ -176,7 +176,7 @@ fun EagleHome(
     onPaste: () -> Unit,
     onScanQr: () -> Unit
 ) {
-    val connected = status == "CONNECTED" || status == "ENGINE_STARTED"
+    val connected = status == "CONNECTED"
     val busy = status == "CONNECTING" || status == "DISCONNECTING"
 
     val background = Brush.verticalGradient(
