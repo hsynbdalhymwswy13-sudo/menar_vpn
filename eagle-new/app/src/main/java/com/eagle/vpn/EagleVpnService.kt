@@ -98,15 +98,20 @@ class EagleVpnService : VpnService(), CommandServerHandler {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        traceEngine("onStartCommand action=${intent?.action} startId=$startId")
         when (intent?.action) {
             ACTION_STOP -> stopEngine()
             else -> {
                 try {
                     createNotificationChannel()
+                    traceEngine("creating foreground notification")
                     startForeground(NOTIFICATION_ID, buildNotification())
+                    traceEngine("foreground notification started")
                     startEngine()
+                    traceEngine("startEngine returned successfully")
                     sendStatus("ENGINE_STARTED", "VPN engine started; remote connectivity is not verified")
                 } catch (e: Exception) {
+                    traceEngine("Unable to start libbox", e)
                     android.util.Log.e(TAG, "Unable to start libbox", e)
                     sendStatus("ERROR", e.message ?: "Unknown service error")
                     stopEngine()
@@ -158,6 +163,24 @@ class EagleVpnService : VpnService(), CommandServerHandler {
         }
     }
 
+    private fun traceEngine(message: String, error: Throwable? = null) {
+        try {
+            val file = File(filesDir, "eagle-engine.log")
+            val detail = buildString {
+                append(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date()))
+                append("  ")
+                append(message)
+                if (error != null) {
+                    append("\\n")
+                    append(android.util.Log.getStackTraceString(error))
+                }
+                append("\\n")
+            }
+            file.appendText(detail)
+        } catch (_: Exception) {
+        }
+    }
+
     private fun sendStatus(status: String, message: String = "") {
         sendBroadcast(
             Intent(ACTION_STATUS)
@@ -169,14 +192,20 @@ class EagleVpnService : VpnService(), CommandServerHandler {
 
     @Synchronized
     private fun startEngine() {
-        if (commandServer != null) return
+        traceEngine("startEngine entered")
+        if (commandServer != null) {
+            traceEngine("command server already exists")
+            return
+        }
 
         val configFile = File(filesDir, "config.json")
         val importedFlag = File(filesDir, "profile-imported.flag")
         if (!configFile.isFile || !importedFlag.isFile) {
             throw IllegalStateException("Import a valid sing-box JSON profile before connecting")
         }
+        traceEngine("validating config")
         Libbox.checkConfig(configFile.readText())
+        traceEngine("config validated")
 
         val setup = SetupOptions().apply {
             basePath = filesDir.absolutePath
@@ -190,12 +219,14 @@ class EagleVpnService : VpnService(), CommandServerHandler {
             appMarketingVersion = "1.0"
         }
 
+        traceEngine("setting up libbox")
         if (!libboxReady) {
             Libbox.setup(setup)
             libboxReady = true
         } else {
             Libbox.reloadSetupOptions(setup)
         }
+        traceEngine("libbox setup complete")
 
         val platformInterface = EaglePlatform(this)
         val server = Libbox.newCommandServer(this, platformInterface)
@@ -203,10 +234,15 @@ class EagleVpnService : VpnService(), CommandServerHandler {
         commandServer = server
 
         try {
+            traceEngine("starting command server")
             server.start()
+            traceEngine("command server started; starting sing-box service")
             server.startOrReloadService(configFile.readText(), OverrideOptions())
+            traceEngine("sing-box service started; starting status client")
             startStatusClient()
+            traceEngine("status client launch requested")
         } catch (e: Exception) {
+            traceEngine("libbox server startup failed", e)
             commandServer = null
             platform = null
             try {
