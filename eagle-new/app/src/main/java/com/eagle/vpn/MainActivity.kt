@@ -176,7 +176,8 @@ fun EagleHome(
     onPaste: () -> Unit,
     onScanQr: () -> Unit
 ) {
-    val connected = status == "CONNECTED"
+    var selectedPage by remember { mutableStateOf("HOME") }
+    val connected = status == "CONNECTED" || status == "ENGINE_STARTED"
     val busy = status == "CONNECTING" || status == "DISCONNECTING"
 
     val background = Brush.verticalGradient(
@@ -208,79 +209,71 @@ fun EagleHome(
                 Text("⚙", color = Color.White, fontSize = 25.sp)
             }
 
-            Spacer(Modifier.height(70.dp))
-
-            Text(
-                "EAGLE",
-                color = Color(0xFFFF2020),
-                fontSize = 34.sp,
-                style = MaterialTheme.typography.headlineLarge
-            )
-            Text(
-                "SECURE CONNECTION",
-                color = Color.White.copy(alpha = .65f),
-                fontSize = 12.sp,
-                letterSpacing = 3.sp
-            )
-
-            Spacer(Modifier.height(55.dp))
-
-            Box(
-                modifier = Modifier
-                    .size(220.dp)
-                    .shadow(35.dp, CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            listOf(Color(0xFFFF3030), Color(0xFF8B0000), Color(0xFF180307)),
-                            radius = 500f
-                        ),
-                        CircleShape
-                    )
-                    .padding(18.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Button(
-                    onClick = {
-                        if (connected) onDisconnect() else onConnect()
-                    },
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxSize(),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF09090D),
-                        disabledContainerColor = Color(0xFF09090D)
-                    )
-                ) {
-                    Text(
-                        when {
-                            busy -> "PLEASE WAIT"
-                            connected -> "DISCONNECT"
-                            else -> "CONNECT"
-                        },
-                        color = Color(0xFFFF3030),
-                        fontSize = 18.sp
-                    )
+            when (selectedPage) {
+                "HOME" -> {
+                    Spacer(Modifier.height(24.dp))
+                    Text("EAGLE", color = Color(0xFFFF3030), fontSize = 34.sp)
+                    Text("SECURE CONNECTION", color = Color.White.copy(alpha = .65f), fontSize = 12.sp, letterSpacing = 3.sp)
+                    Spacer(Modifier.height(30.dp))
+                    Box(
+                        Modifier.size(210.dp).shadow(30.dp, CircleShape)
+                            .background(Brush.radialGradient(listOf(Color(0xFFFF3030), Color(0xFF8B0000), Color(0xFF180307))), CircleShape)
+                            .padding(18.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Button(
+                            onClick = { if (connected) onDisconnect() else onConnect() },
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxSize(),
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF09090D))
+                        ) {
+                            Text(
+                                when { busy -> "PLEASE WAIT"; connected -> "DISCONNECT"; else -> "CONNECT" },
+                                color = Color(0xFFFF3030), fontSize = 17.sp
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text(status, color = if (connected) Color(0xFF65E6A5) else Color.White, fontSize = 14.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Text(profile, color = Color.White.copy(alpha = .7f), fontSize = 12.sp)
+                }
+                "SERVERS" -> {
+                    Spacer(Modifier.height(20.dp))
+                    Text("SERVERS & PROFILES", color = Color(0xFFFF3030), fontSize = 22.sp)
+                    Spacer(Modifier.height(18.dp))
+                    Text(profile, color = Color.White, fontSize = 14.sp)
+                    Spacer(Modifier.height(18.dp))
+                    Button(onClick = onImportFile, modifier = Modifier.fillMaxWidth()) { Text("IMPORT CONFIG FILE") }
+                    Button(onClick = onPaste, modifier = Modifier.fillMaxWidth()) { Text("PASTE FROM CLIPBOARD") }
+                    Button(onClick = onScanQr, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B0000))) { Text("SCAN QR CODE") }
+                    Spacer(Modifier.height(10.dp))
+                    Text("Only validated sing-box JSON profiles are supported.", color = Color.White.copy(alpha = .6f), fontSize = 11.sp)
+                }
+                "STATS" -> {
+                    Spacer(Modifier.height(20.dp))
+                    Text("TRAFFIC ANALYTICS", color = Color(0xFFFF3030), fontSize = 22.sp)
+                    Spacer(Modifier.height(18.dp))
+                    Text("Current status: $status", color = Color.White, fontSize = 15.sp)
+                    Spacer(Modifier.height(14.dp))
+                    Text("Upload speed: available when traffic monitoring is connected", color = Color.White.copy(alpha = .75f), fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Download speed: available when traffic monitoring is connected", color = Color.White.copy(alpha = .75f), fontSize = 12.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Live traffic counters will appear here when exposed to the app UI.", color = Color.White.copy(alpha = .55f), fontSize = 11.sp)
+                }
+                else -> {
+                    Spacer(Modifier.height(20.dp))
+                    Text("SETTINGS", color = Color(0xFFFF3030), fontSize = 22.sp)
+                    Spacer(Modifier.height(18.dp))
+                    Text("EAGLE VPN • Version 1.0", color = Color.White, fontSize = 15.sp)
+                    Spacer(Modifier.height(10.dp))
+                    Text("VPN status: $status", color = Color.White.copy(alpha = .8f), fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
+                    Text("Auto reconnect, kill switch and split tunneling are not implemented yet.", color = Color.White.copy(alpha = .6f), fontSize = 12.sp)
                 }
             }
-
-            Spacer(Modifier.height(14.dp))
-            Text(profile, color = if (profile.startsWith("Profile imported")) Color(0xFF65E6A5) else Color(0xFFFF7070), fontSize = 12.sp)
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(onClick = onImportFile, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF252532))) { Text("IMPORT FILE", fontSize = 9.sp) }
-                Button(onClick = onPaste, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF252532))) { Text("PASTE", fontSize = 9.sp) }
-                Button(onClick = onScanQr, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B0000))) { Text("SCAN QR", fontSize = 9.sp) }
-            }
-            Spacer(Modifier.height(8.dp))
-            Text("Sing-box JSON only • Server reachability is not guaranteed", color = Color.White.copy(alpha = .55f), fontSize = 10.sp)
-            Spacer(Modifier.height(16.dp))
-
-            Text(
-                status,
-                color = if (connected || status == "ERROR") Color(0xFFFF3030) else Color.White,
-                fontSize = 15.sp,
-                letterSpacing = 2.sp
-            )
 
             Spacer(Modifier.weight(1f))
 
@@ -291,10 +284,7 @@ fun EagleHome(
                     .padding(vertical = 18.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Text("HOME", color = Color(0xFFFF3030), fontSize = 12.sp)
-                Text("SERVERS", color = Color.White, fontSize = 12.sp)
-                Text("STATS", color = Color.White, fontSize = 12.sp)
-                Text("SETTINGS", color = Color.White, fontSize = 12.sp)
+                listOf("HOME", "SERVERS", "STATS", "SETTINGS").forEach { tab -> TextButton(onClick = { selectedPage = tab }) { Text(tab, color = if (selectedPage == tab) Color(0xFFFF3030) else Color.White, fontSize = 12.sp) } }
             }
         }
     }

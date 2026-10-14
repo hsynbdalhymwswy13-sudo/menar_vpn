@@ -1,0 +1,52 @@
+name: Build EAGLE VPN APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'eagle-new/**'
+      - '.github/workflows/eagle-build.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+
+      - name: Install Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Verify EAGLE source and libbox
+        run: |
+          test -f eagle-new/app/src/main/java/com/eagle/vpn/MainActivity.kt
+          test -f eagle-new/app/libs/libbox.aar
+          unzip -t eagle-new/app/libs/libbox.aar >/dev/null
+
+      - name: Build EAGLE debug APK
+        env:
+          GRADLE_OPTS: "-Xmx4g -Dfile.encoding=UTF-8"
+        run: cd eagle-new && gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Upload EAGLE APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: EAGLE-VPN-debug-APK
+          path: eagle-new/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
