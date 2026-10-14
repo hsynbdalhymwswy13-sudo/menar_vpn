@@ -1,1 +1,2 @@
 eagle-vpn/app/libs/libbox.aar filter=lfs diff=lfs merge=lfs -text
+eagle-new/app/libs/libbox.aar filter=lfs diff=lfs merge=lfs -text
