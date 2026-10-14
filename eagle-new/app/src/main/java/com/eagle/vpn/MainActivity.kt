@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         filePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri != null) try { contentResolver.openInputStream(uri)?.bufferedReader()?.use { importConfig(it.readText()) } } catch (e: Exception) { android.widget.Toast.makeText(this, "Could not read selected file", android.widget.Toast.LENGTH_LONG).show() }
+            if (uri != null) try { contentResolver.openInputStream(uri)?.bufferedReader()?.use { importConfig(it.readText()) } } catch (e: Exception) { android.widget.Toast.makeText(this, "خواندن فایل انتخاب‌شده ناموفق بود", android.widget.Toast.LENGTH_LONG).show() }
         }
         profileState.value = if (File(filesDir, "profile-imported.flag").isFile && File(filesDir, "config.json").isFile) "Profile imported" else "No profile imported"
         vpnPermissionLauncher =
@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
                 if (result.resultCode == Activity.RESULT_OK) {
                     startVpnService()
                 } else {
-                    connectionState.value = "PERMISSION DENIED"
+                    connectionState.value = "مجوز اتصال رد شد"
                 }
             }
 
@@ -73,7 +73,7 @@ class MainActivity : ComponentActivity() {
             profile = profileState.value,
             onImportFile = { filePicker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
             onPaste = { pasteConfig() },
-            onScanQr = { qrScanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("Scan sing-box JSON QR").setBeepEnabled(false).setOrientationLocked(false)) }
+            onScanQr = { qrScanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("کد QR کانفیگ سینگ‌باکس را اسکن کنید").setBeepEnabled(false).setOrientationLocked(false)) }
             )
         }
     }
@@ -102,17 +102,17 @@ class MainActivity : ComponentActivity() {
 
     private fun importConfig(raw: String) {
         try {
-            require(raw.trimStart().startsWith("{")) { "Only sing-box JSON profiles are supported" }
+            require(raw.trimStart().startsWith("{")) { "فقط کانفیگ JSON سینگ‌باکس پشتیبانی می‌شود" }
             Libbox.checkConfig(raw)
             val target = File(filesDir, "config.json")
             val temp = File(filesDir, "config.json.tmp")
             temp.writeText(raw)
-            check(temp.renameTo(target)) { "Could not save profile" }
+            check(temp.renameTo(target)) { "ذخیره کانفیگ ناموفق بود" }
             File(filesDir, "profile-imported.flag").writeText("ok")
-            profileState.value = "Profile imported and validated"
-            android.widget.Toast.makeText(this, "Config imported successfully", android.widget.Toast.LENGTH_LONG).show()
+            profileState.value = "کانفیگ وارد و بررسی شد"
+            android.widget.Toast.makeText(this, "کانفیگ با موفقیت وارد شد", android.widget.Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
-            profileState.value = "Import failed: ${e.message ?: "Invalid config"}"
+            profileState.value = "خطا در واردکردن: ${e.message ?: "کانفیگ نامعتبر است"}"
             android.widget.Toast.makeText(this, profileState.value, android.widget.Toast.LENGTH_LONG).show()
             android.util.Log.e("MainActivity", "Config import failed", e)
         }
@@ -122,14 +122,14 @@ class MainActivity : ComponentActivity() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val raw = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
         if (raw.isNullOrBlank()) {
-            android.widget.Toast.makeText(this, "Clipboard is empty", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(this, "حافظهٔ کپی خالی است", android.widget.Toast.LENGTH_LONG).show()
         } else importConfig(raw)
     }
 
     private fun requestVpnPermission() {
         if (!File(filesDir, "config.json").isFile || !File(filesDir, "profile-imported.flag").isFile) {
-            connectionState.value = "IMPORT CONFIG FIRST"
-            android.widget.Toast.makeText(this, "Import a valid sing-box JSON profile first", android.widget.Toast.LENGTH_LONG).show()
+            connectionState.value = "ابتدا کانفیگ را وارد کنید"
+            android.widget.Toast.makeText(this, "ابتدا یک کانفیگ JSON معتبر سینگ‌باکس وارد کنید", android.widget.Toast.LENGTH_LONG).show()
             return
         }
 
@@ -176,8 +176,8 @@ fun EagleHome(
     onPaste: () -> Unit,
     onScanQr: () -> Unit
 ) {
-    var selectedPage by remember { mutableStateOf("HOME") }
-    val connected = status == "CONNECTED" || status == "ENGINE_STARTED"
+    var selectedPage by remember { mutableStateOf("خانه") }
+    val connected = status == "CONNECTED"
     val busy = status == "CONNECTING" || status == "DISCONNECTING"
 
     val background = Brush.verticalGradient(
@@ -209,82 +209,147 @@ fun EagleHome(
                 Text("⚙", color = Color.White, fontSize = 25.sp)
             }
 
-            when (selectedPage) {
-                "HOME" -> {
-                    Spacer(Modifier.height(24.dp))
-                    Text("EAGLE", color = Color(0xFFFF3030), fontSize = 34.sp)
-                    Text("SECURE CONNECTION", color = Color.White.copy(alpha = .65f), fontSize = 12.sp, letterSpacing = 3.sp)
-                    Spacer(Modifier.height(30.dp))
-                    Box(
-                        Modifier.size(210.dp).shadow(30.dp, CircleShape)
-                            .background(Brush.radialGradient(listOf(Color(0xFFFF3030), Color(0xFF8B0000), Color(0xFF180307))), CircleShape)
-                            .padding(18.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Button(
-                            onClick = { if (connected) onDisconnect() else onConnect() },
-                            enabled = !busy,
-                            modifier = Modifier.fillMaxSize(),
-                            shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF09090D))
-                        ) {
-                            Text(
-                                when { busy -> "PLEASE WAIT"; connected -> "DISCONNECT"; else -> "CONNECT" },
-                                color = Color(0xFFFF3030), fontSize = 17.sp
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    Text(status, color = if (connected) Color(0xFF65E6A5) else Color.White, fontSize = 14.sp)
-                    Spacer(Modifier.height(12.dp))
-                    Text(profile, color = Color.White.copy(alpha = .7f), fontSize = 12.sp)
-                }
-                "SERVERS" -> {
-                    Spacer(Modifier.height(20.dp))
-                    Text("SERVERS & PROFILES", color = Color(0xFFFF3030), fontSize = 22.sp)
-                    Spacer(Modifier.height(18.dp))
-                    Text(profile, color = Color.White, fontSize = 14.sp)
-                    Spacer(Modifier.height(18.dp))
-                    Button(onClick = onImportFile, modifier = Modifier.fillMaxWidth()) { Text("IMPORT CONFIG FILE") }
-                    Button(onClick = onPaste, modifier = Modifier.fillMaxWidth()) { Text("PASTE FROM CLIPBOARD") }
-                    Button(onClick = onScanQr, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B0000))) { Text("SCAN QR CODE") }
-                    Spacer(Modifier.height(10.dp))
-                    Text("Only validated sing-box JSON profiles are supported.", color = Color.White.copy(alpha = .6f), fontSize = 11.sp)
-                }
-                "STATS" -> {
-                    Spacer(Modifier.height(20.dp))
-                    Text("TRAFFIC ANALYTICS", color = Color(0xFFFF3030), fontSize = 22.sp)
-                    Spacer(Modifier.height(18.dp))
-                    Text("Current status: $status", color = Color.White, fontSize = 15.sp)
-                    Spacer(Modifier.height(14.dp))
-                    Text("Upload speed: available when traffic monitoring is connected", color = Color.White.copy(alpha = .75f), fontSize = 12.sp)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Download speed: available when traffic monitoring is connected", color = Color.White.copy(alpha = .75f), fontSize = 12.sp)
-                    Spacer(Modifier.height(12.dp))
-                    Text("Live traffic counters will appear here when exposed to the app UI.", color = Color.White.copy(alpha = .55f), fontSize = 11.sp)
-                }
-                else -> {
-                    Spacer(Modifier.height(20.dp))
-                    Text("SETTINGS", color = Color(0xFFFF3030), fontSize = 22.sp)
-                    Spacer(Modifier.height(18.dp))
-                    Text("EAGLE VPN • Version 1.0", color = Color.White, fontSize = 15.sp)
-                    Spacer(Modifier.height(10.dp))
-                    Text("VPN status: $status", color = Color.White.copy(alpha = .8f), fontSize = 13.sp)
-                    Spacer(Modifier.height(10.dp))
-                    Text("Auto reconnect, kill switch and split tunneling are not implemented yet.", color = Color.White.copy(alpha = .6f), fontSize = 12.sp)
+            if (selectedPage == "خانه") {
+                Spacer(Modifier.height(70.dp))
+
+            Text(
+                "EAGLE",
+                color = Color(0xFFFF2020),
+                fontSize = 34.sp,
+                style = MaterialTheme.typography.headlineLarge
+            )
+            Text(
+                "اتصال امن",
+                color = Color.White.copy(alpha = .65f),
+                fontSize = 12.sp,
+                letterSpacing = 3.sp
+            )
+
+            Spacer(Modifier.height(55.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(220.dp)
+                    .shadow(35.dp, CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(Color(0xFFFF3030), Color(0xFF8B0000), Color(0xFF180307)),
+                            radius = 500f
+                        ),
+                        CircleShape
+                    )
+                    .padding(18.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Button(
+                    onClick = {
+                        if (connected) onDisconnect() else onConnect()
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxSize(),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF09090D),
+                        disabledContainerColor = Color(0xFF09090D)
+                    )
+                ) {
+                    Text(
+                        when {
+                            busy -> "لطفاً صبر کنید"
+                            connected -> "قطع اتصال"
+                            else -> "اتصال"
+                        },
+                        color = Color(0xFFFF3030),
+                        fontSize = 18.sp
+                    )
                 }
             }
 
+            Spacer(Modifier.height(14.dp))
+            Text(profile, color = if (profile.startsWith("Profile imported")) Color(0xFF65E6A5) else Color(0xFFFF7070), fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(onClick = onImportFile, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF252532))) { Text("انتخاب فایل", fontSize = 9.sp) }
+                Button(onClick = onPaste, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF252532))) { Text("چسباندن", fontSize = 9.sp) }
+                Button(onClick = onScanQr, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B0000))) { Text("اسکن QR", fontSize = 9.sp) }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("فقط کانفیگ JSON سینگ‌باکس • اتصال سرور تضمین‌شده نیست", color = Color.White.copy(alpha = .55f), fontSize = 10.sp)
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                status,
+                color = if (connected || status == "ERROR") Color(0xFFFF3030) else Color.White,
+                fontSize = 15.sp,
+                letterSpacing = 2.sp
+            )
+
+            } else if (selectedPage == "سرورها") {
+                Spacer(Modifier.height(30.dp))
+                Text("سرورها و کانفیگ‌ها", color = Color.White, fontSize = 22.sp)
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    if (profile.startsWith("Profile imported")) "کانفیگ وارد شده است" else "هنوز کانفیگی وارد نشده",
+                    color = Color(0xFF65E6A5),
+                    fontSize = 14.sp
+                )
+                Spacer(Modifier.height(18.dp))
+                Button(onClick = onImportFile) { Text("انتخاب فایل کانفیگ") }
+                Button(onClick = onPaste) { Text("چسباندن کانفیگ") }
+                Button(
+                    onClick = onScanQr,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B0000))
+                ) { Text("اسکن کد QR") }
+            } else if (selectedPage == "آمار") {
+                Spacer(Modifier.height(30.dp))
+                Text("آمار اتصال", color = Color.White, fontSize = 22.sp)
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    when (status) {
+                        "CONNECTED" -> "وضعیت: متصل"
+                        "CONNECTING" -> "وضعیت: در حال اتصال"
+                        "DISCONNECTING" -> "وضعیت: در حال قطع اتصال"
+                        "ERROR" -> "وضعیت: خطا"
+                        else -> "وضعیت: آماده اتصال"
+                    },
+                    color = if (connected) Color(0xFF65E6A5) else Color.White,
+                    fontSize = 16.sp
+                )
+                Spacer(Modifier.height(16.dp))
+                Text("آمار زندهٔ سرعت و حجم مصرف هنوز فعال نیست.", color = Color.White.copy(alpha = .65f), fontSize = 12.sp)
+            } else {
+                Spacer(Modifier.height(30.dp))
+                Text("تنظیمات", color = Color.White, fontSize = 22.sp)
+                Spacer(Modifier.height(24.dp))
+                Text("نام برنامه: EAGLE VPN", color = Color.White, fontSize = 14.sp)
+                Spacer(Modifier.height(14.dp))
+                Text("هسته: sing-box / libbox", color = Color.White, fontSize = 14.sp)
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    "Kill Switch و Split Tunneling هنوز پیاده‌سازی نشده‌اند.",
+                    color = Color.White.copy(alpha = .65f),
+                    fontSize = 12.sp
+                )
+            }
             Spacer(Modifier.weight(1f))
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF111118), RoundedCornerShape(22.dp))
-                    .padding(vertical = 18.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                    .background(Color(0xFF111827), RoundedCornerShape(22.dp))
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                listOf("HOME", "SERVERS", "STATS", "SETTINGS").forEach { tab -> TextButton(onClick = { selectedPage = tab }) { Text(tab, color = if (selectedPage == tab) Color(0xFFFF3030) else Color.White, fontSize = 12.sp) } }
+                listOf("خانه", "سرورها", "آمار", "تنظیمات").forEach { page ->
+                    TextButton(onClick = { selectedPage = page }) {
+                        Text(
+                            page,
+                            color = if (selectedPage == page) Color(0xFFFF3448) else Color.White,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
             }
         }
     }
