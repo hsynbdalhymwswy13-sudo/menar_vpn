@@ -9,6 +9,15 @@ import android.net.VpnService
 import android.os.IBinder
 import io.nekohasekai.libbox.CommandServer
 import io.nekohasekai.libbox.CommandServerHandler
+import io.nekohasekai.libbox.CommandClient
+import io.nekohasekai.libbox.CommandClientHandler
+import io.nekohasekai.libbox.CommandClientOptions
+import io.nekohasekai.libbox.ConnectionEvents
+import io.nekohasekai.libbox.LogIterator
+import io.nekohasekai.libbox.OutboundGroupItemIterator
+import io.nekohasekai.libbox.OutboundGroupIterator
+import io.nekohasekai.libbox.StatusMessage
+import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.OverrideOptions
 import io.nekohasekai.libbox.SetupOptions
@@ -19,6 +28,74 @@ class EagleVpnService : VpnService(), CommandServerHandler {
 
     private var commandServer: CommandServer? = null
     private var platform: EaglePlatform? = null
+    @Volatile private var statusClient: CommandClient? = null
+
+    private val statusHandler = object : CommandClientHandler {
+        override fun connected() {
+            sendStatus(
+                "ENGINE_STARTED",
+                "libbox status monitor connected; remote connectivity is not verified"
+            )
+        }
+
+        override fun disconnected(message: String?) {
+            sendStatus(
+                "ENGINE_STARTED",
+                message ?: "Status monitor disconnected; remote connectivity is not verified"
+            )
+        }
+
+        override fun writeStatus(message: StatusMessage) {
+            sendBroadcast(
+                Intent(ACTION_STATUS)
+                    .setPackage(packageName)
+                    .putExtra("status", "ENGINE_STARTED")
+                    .putExtra("message", "libbox status received; remote connectivity is not verified")
+                    .putExtra("trafficAvailable", message.trafficAvailable)
+                    .putExtra("uplink", message.uplink)
+                    .putExtra("downlink", message.downlink)
+                    .putExtra("uplinkTotal", message.uplinkTotal)
+                    .putExtra("downlinkTotal", message.downlinkTotal)
+                    .putExtra("connectionsIn", message.connectionsIn)
+                    .putExtra("connectionsOut", message.connectionsOut)
+                    .putExtra("memory", message.memory)
+            )
+        }
+
+        override fun clearLogs() {}
+        override fun initializeClashMode(modeList: StringIterator, currentMode: String) {}
+        override fun setDefaultLogLevel(level: Int) {}
+        override fun updateClashMode(newMode: String) {}
+        override fun writeConnectionEvents(events: ConnectionEvents) {}
+        override fun writeGroups(message: OutboundGroupIterator) {}
+        override fun writeLogs(messageList: LogIterator) {}
+        override fun writeOutbounds(message: OutboundGroupItemIterator) {}
+    }
+
+    private fun startStatusClient() {
+        if (statusClient != null) return
+
+        val options = CommandClientOptions().apply {
+            addCommand(Libbox.CommandStatus)
+            statusInterval = 1_000_000_000L
+        }
+        val client = Libbox.newCommandClient(statusHandler, options)
+        statusClient = client
+
+        Thread({
+            try {
+                client.connect()
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "libbox status client failed", e)
+                if (statusClient === client) {
+                    sendStatus(
+                        "ENGINE_STARTED",
+                        "Status monitor unavailable: ${e.message ?: e.javaClass.simpleName}"
+                    )
+                }
+            }
+        }, "EagleLibboxStatus").start()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -128,6 +205,7 @@ class EagleVpnService : VpnService(), CommandServerHandler {
         try {
             server.start()
             server.startOrReloadService(configFile.readText(), OverrideOptions())
+            startStatusClient()
         } catch (e: Exception) {
             commandServer = null
             platform = null
@@ -143,6 +221,16 @@ class EagleVpnService : VpnService(), CommandServerHandler {
 
     @Synchronized
     private fun stopEngine() {
+        val client = statusClient
+        statusClient = null
+        if (client != null) {
+            try {
+                client.disconnect()
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "Error closing libbox status client", e)
+            }
+        }
+
         val server = commandServer
         commandServer = null
         platform = null
