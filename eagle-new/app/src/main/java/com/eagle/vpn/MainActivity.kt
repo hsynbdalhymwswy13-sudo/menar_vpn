@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.sp
 class MainActivity : ComponentActivity() {
     private val connectionState = mutableStateOf("READY")
     private val profileState = mutableStateOf("No profile imported")
+    private val profilesState = mutableStateOf<List<String>>(emptyList())
+    private val selectedProfileState = mutableStateOf("")
     private lateinit var filePicker: ActivityResultLauncher<Array<String>>
     private val qrScanner = registerForActivityResult(ScanContract()) { result ->
         if (result.contents != null) importConfig(result.contents)
@@ -59,7 +61,7 @@ class MainActivity : ComponentActivity() {
         filePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) try { contentResolver.openInputStream(uri)?.bufferedReader()?.use { importConfig(it.readText()) } } catch (e: Exception) { android.widget.Toast.makeText(this, "خواندن فایل انتخاب‌شده ناموفق بود", android.widget.Toast.LENGTH_LONG).show() }
         }
-        profileState.value = if (File(filesDir, "profile-imported.flag").isFile && File(filesDir, "config.json").isFile) "Profile imported" else "No profile imported"
+        loadProfiles()
         vpnPermissionLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
                 if (result.resultCode == Activity.RESULT_OK) {
@@ -77,7 +79,11 @@ class MainActivity : ComponentActivity() {
             profile = profileState.value,
             onImportFile = { filePicker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
             onPaste = { pasteConfig() },
-            onScanQr = { qrScanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("کد QR کانفیگ سینگ‌باکس را اسکن کنید").setBeepEnabled(false).setOrientationLocked(false)) }
+            onScanQr = { qrScanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("کد QR کانفیگ سینگ‌باکس را اسکن کنید").setBeepEnabled(false).setOrientationLocked(false)) },
+            profiles = profilesState.value,
+            selectedProfile = selectedProfileState.value,
+            onSelectProfile = { selectProfile(it) },
+            onDeleteProfile = { deleteProfile(it) }
             )
         }
     }
@@ -104,6 +110,22 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
+    private fun requestVpnPermission() {
+        val intent = VpnService.prepare(this)
+        if (intent != null) vpnPermissionLauncher.launch(intent) else startVpnService()
+    }
+
+    private fun pasteConfig() {
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+            check(text.isNotBlank()) { "حافظهٔ موقت خالی است" }
+            importConfig(text)
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this, "خواندن کانفیگ از حافظه ناموفق بود: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun importConfig(raw: String) {
         try {
             val input = ConfigImportParser.convert(raw)
@@ -122,7 +144,15 @@ class MainActivity : ComponentActivity() {
             check(temp.renameTo(target)) { "ذخیره کانفیگ ناموفق بود" }
 
             File(filesDir, "profile-imported.flag").writeText("ok")
+            val dir = File(filesDir, "profiles")
+            if (!dir.exists()) dir.mkdirs()
+            val nextId = (getProfileFiles().mapNotNull { Regex("profile_(\\d+)\\.json").matchEntire(it.name)?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: 0) + 1
+            val saved = File(dir, "profile_${nextId}.json")
+            saved.writeText(formatted)
+            File(filesDir, "selected-profile.txt").writeText(saved.name)
+            loadProfiles()
             profileState.value = "کانفیگ وارد و بررسی شد"
+
             android.widget.Toast.makeText(
                 this,
                 "کانفیگ با موفقیت وارد و بررسی شد",
@@ -139,26 +169,69 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun pasteConfig() {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val raw = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
-        if (raw.isNullOrBlank()) {
-            android.widget.Toast.makeText(this, "حافظهٔ کپی خالی است", android.widget.Toast.LENGTH_LONG).show()
-        } else importConfig(raw)
+    private fun getProfileFiles(): List<File> {
+        val dir = File(filesDir, "profiles")
+        if (!dir.exists()) dir.mkdirs()
+        return dir.listFiles()?.filter { it.isFile && Regex("profile_\\d+\\.json").matches(it.name) }?.sortedBy { Regex("profile_(\\d+)\\.json").matchEntire(it.name)?.groupValues?.get(1)?.toIntOrNull() ?: 0 } ?: emptyList()
     }
 
-    private fun requestVpnPermission() {
-        if (!File(filesDir, "config.json").isFile || !File(filesDir, "profile-imported.flag").isFile) {
-            connectionState.value = "ابتدا کانفیگ را وارد کنید"
-            android.widget.Toast.makeText(this, "ابتدا یک کانفیگ JSON معتبر سینگ‌باکس وارد کنید", android.widget.Toast.LENGTH_LONG).show()
-            return
+    private fun loadProfiles() {
+        val dir = File(filesDir, "profiles")
+        if (!dir.exists()) dir.mkdirs()
+        var files = getProfileFiles()
+        val active = File(filesDir, "config.json")
+        if (files.isEmpty() && active.isFile) {
+            File(dir, "profile_1.json").writeText(active.readText())
+            files = getProfileFiles()
         }
-
-        val prepareIntent = VpnService.prepare(this)
-        if (prepareIntent == null) {
-            startVpnService()
+        val marker = File(filesDir, "selected-profile.txt")
+        var selected = if (marker.isFile) marker.readText().trim() else ""
+        if (files.none { it.name == selected }) selected = files.lastOrNull()?.name.orEmpty()
+        if (selected.isNotBlank()) {
+            files.first { it.name == selected }.copyTo(active, overwrite = true)
+            marker.writeText(selected)
+            File(filesDir, "profile-imported.flag").writeText("ok")
+            profileState.value = "کانفیگ فعال: $selected"
         } else {
-            vpnPermissionLauncher.launch(prepareIntent)
+            profileState.value = "هنوز کانفیگی وارد نشده"
+        }
+        profilesState.value = files.map { it.name }
+        selectedProfileState.value = selected
+    }
+
+    private fun selectProfile(name: String) {
+        try {
+            val file = getProfileFiles().firstOrNull { it.name == name } ?: error("کانفیگ پیدا نشد")
+            Libbox.checkConfig(file.readText())
+            file.copyTo(File(filesDir, "config.json"), overwrite = true)
+            File(filesDir, "selected-profile.txt").writeText(name)
+            File(filesDir, "profile-imported.flag").writeText("ok")
+            loadProfiles()
+            android.widget.Toast.makeText(this, "کانفیگ انتخاب شد؛ برای اعمال دوباره متصل شوید", android.widget.Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this, "انتخاب ناموفق: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun deleteProfile(name: String) {
+        try {
+            val file = getProfileFiles().firstOrNull { it.name == name } ?: error("کانفیگ پیدا نشد")
+            check(file.delete()) { "حذف فایل ناموفق بود" }
+            val remaining = getProfileFiles()
+            if (remaining.isEmpty()) {
+                File(filesDir, "config.json").delete()
+                File(filesDir, "selected-profile.txt").delete()
+                File(filesDir, "profile-imported.flag").delete()
+                profilesState.value = emptyList()
+                selectedProfileState.value = ""
+                profileState.value = "هنوز کانفیگی وارد نشده"
+            } else {
+                val next = if (name == selectedProfileState.value) remaining.first().name else selectedProfileState.value
+                selectProfile(next)
+            }
+            android.widget.Toast.makeText(this, "کانفیگ حذف شد", android.widget.Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this, "حذف ناموفق: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
@@ -195,7 +268,11 @@ fun EagleHome(
     profile: String,
     onImportFile: () -> Unit,
     onPaste: () -> Unit,
-    onScanQr: () -> Unit
+    onScanQr: () -> Unit,
+    profiles: List<String>,
+    selectedProfile: String,
+    onSelectProfile: (String) -> Unit,
+    onDeleteProfile: (String) -> Unit
 ) {
     var selectedPage by remember { mutableStateOf("خانه") }
     val connected = status == "CONNECTED" || status == "ENGINE_STARTED"
