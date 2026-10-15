@@ -194,7 +194,7 @@ fun EagleHome(
     onScanQr: () -> Unit
 ) {
     var selectedPage by remember { mutableStateOf("خانه") }
-    val connected = status == "CONNECTED"
+    val connected = status == "CONNECTED" || status == "ENGINE_STARTED"
     val busy = status == "CONNECTING" || status == "DISCONNECTING"
 
     val background = Brush.verticalGradient(
@@ -250,7 +250,10 @@ fun EagleHome(
                     .shadow(35.dp, CircleShape)
                     .background(
                         Brush.radialGradient(
-                            listOf(Color(0xFFFF3030), Color(0xFF8B0000), Color(0xFF180307)),
+                            if (connected)
+                                listOf(Color(0xFF39F59A), Color(0xFF087F4F), Color(0xFF031B12))
+                            else
+                                listOf(Color(0xFFFF3030), Color(0xFF8B0000), Color(0xFF180307)),
                             radius = 500f
                         ),
                         CircleShape
@@ -266,8 +269,8 @@ fun EagleHome(
                     modifier = Modifier.fillMaxSize(),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF09090D),
-                        disabledContainerColor = Color(0xFF09090D)
+                        containerColor = if (connected) Color(0xFF087F4F) else if (busy) Color(0xFF665018) else Color(0xFF09090D),
+                        disabledContainerColor = if (connected) Color(0xFF087F4F) else Color(0xFF665018)
                     )
                 ) {
                     Text(
@@ -276,7 +279,7 @@ fun EagleHome(
                             connected -> "قطع اتصال"
                             else -> "اتصال"
                         },
-                        color = Color(0xFFFF3030),
+                        color = if (connected) Color.White else if (busy) Color.White else Color(0xFFFF6060),
                         fontSize = 18.sp
                     )
                 }
@@ -291,14 +294,26 @@ fun EagleHome(
                 Button(onClick = onScanQr, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B0000))) { Text("اسکن QR", fontSize = 9.sp) }
             }
             Spacer(Modifier.height(8.dp))
-            Text("فقط کانفیگ JSON سینگ‌باکس • اتصال سرور تضمین‌شده نیست", color = Color.White.copy(alpha = .55f), fontSize = 10.sp)
+            Text("پشتیبانی از JSON و لینک‌های VLESS، VMess، Trojan و Shadowsocks", color = Color.White.copy(alpha = .65f), fontSize = 10.sp)
             Spacer(Modifier.height(16.dp))
 
             Text(
-                status,
-                color = if (connected || status == "ERROR") Color(0xFFFF3030) else Color.White,
+                when (status) {
+                    "CONNECTED", "ENGINE_STARTED" -> "● موتور VPN روشن است"
+                    "CONNECTING" -> "در حال اتصال..."
+                    "DISCONNECTING" -> "در حال قطع اتصال..."
+                    "ERROR" -> "خطا در اتصال"
+                    "مجوز اتصال رد شد" -> status
+                    else -> "آماده اتصال"
+                },
+                color = when {
+                    connected -> Color(0xFF65E6A5)
+                    status == "ERROR" -> Color(0xFFFF6060)
+                    busy -> Color(0xFFFFD166)
+                    else -> Color.White
+                },
                 fontSize = 15.sp,
-                letterSpacing = 2.sp
+                letterSpacing = 1.sp
             )
 
             } else if (selectedPage == "سرورها") {
