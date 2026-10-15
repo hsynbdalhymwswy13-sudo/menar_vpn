@@ -102,26 +102,14 @@ class MainActivity : ComponentActivity() {
 
     private fun importConfig(raw: String) {
         try {
-            var input = raw.trim().removePrefix("\uFEFF").trim()
-            require(input.isNotBlank()) { "ورودی کانفیگ خالی است" }
-
-            if (!input.startsWith("{")) {
-                val lines = input.lines().map { it.trim() }
-                    .filter { it.isNotEmpty() && !it.startsWith("#") }
-                val links = lines.filter {
-                    it.startsWith("vless://") || it.startsWith("vmess://") ||
-                    it.startsWith("trojan://") || it.startsWith("ss://")
-                }
-                require(links.isEmpty()) {
-                    "این نسخه هنوز تبدیل لینک‌های VLESS/Vmess/Trojan/SS را ندارد؛ کانفیگ JSON سینگ‌باکس وارد کنید"
-                }
-                throw IllegalArgumentException("فرمت پشتیبانی نمی‌شود؛ فایل JSON سینگ‌باکس وارد کنید")
-            }
-
+            val input = ConfigImportParser.convert(raw)
             Libbox.checkConfig(input)
+
             val formatted = try {
                 Libbox.formatConfig(input).value.takeIf { it.isNotBlank() } ?: input
-            } catch (_: Exception) { input }
+            } catch (_: Exception) {
+                input
+            }
             Libbox.checkConfig(formatted)
 
             val target = File(filesDir, "config.json")
@@ -132,12 +120,16 @@ class MainActivity : ComponentActivity() {
             File(filesDir, "profile-imported.flag").writeText("ok")
             profileState.value = "کانفیگ وارد و بررسی شد"
             android.widget.Toast.makeText(
-                this, "کانفیگ با موفقیت وارد شد", android.widget.Toast.LENGTH_LONG
+                this,
+                "کانفیگ با موفقیت وارد و بررسی شد",
+                android.widget.Toast.LENGTH_LONG
             ).show()
         } catch (e: Exception) {
             profileState.value = "خطا در واردکردن: ${e.message ?: "کانفیگ نامعتبر است"}"
             android.widget.Toast.makeText(
-                this, profileState.value, android.widget.Toast.LENGTH_LONG
+                this,
+                profileState.value,
+                android.widget.Toast.LENGTH_LONG
             ).show()
             android.util.Log.e("MainActivity", "Config import failed", e)
         }
