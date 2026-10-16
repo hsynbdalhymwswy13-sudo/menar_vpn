@@ -31,6 +31,7 @@ android {
 }
 
 dependencies {
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation(files("libs/libbox.aar"))
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.0")

@@ -1,8 +1,16 @@
 package com.eagle.pro
 
 import android.os.Bundle
+import android.app.Activity
+import android.content.Intent
+import android.net.VpnService
+import android.os.Build
+import org.json.JSONObject
+import java.io.File
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -19,12 +27,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 
 private val Red = Color(0xFFFF3045)
 private val Night = Color(0xFF070B14)
@@ -48,13 +59,79 @@ private fun EagleScreen() {
     var autoReconnect by remember { mutableStateOf(true) }
     var killSwitch by remember { mutableStateOf(false) }
     var splitTunnel by remember { mutableStateOf(false) }
-    val profiles = remember { mutableStateListOf<String>() }
+    val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("eagle_profiles", Context.MODE_PRIVATE) }
+    val profiles = remember {
+        mutableStateListOf<String>().apply {
+            addAll(preferences.getStringSet("profiles", emptySet()).orEmpty())
+        }
+    }
     val clipboard = LocalClipboardManager.current
+    var selectedProfile by remember { mutableStateOf(profiles.firstOrNull().orEmpty()) }
+
+    fun saveSingBoxConfig(): Boolean {
+        val config = selectedProfile.ifBlank { draft.trim() }
+        if (!config.trimStart().startsWith("{")) {
+            message("برای اتصال واقعی، فعلاً کانفیگ JSON استاندارد sing-box وارد کنید؛ لینک‌های VLESS و VMess هنوز به تبدیل نیاز دارند.")
+            return false
+        }
+        try {
+            JSONObject(config)
+            File(context.filesDir, "config.json").writeText(config)
+            File(context.filesDir, "profile-imported.flag").writeText("1")
+            return true
+        } catch (e: Exception) {
+            message("JSON معتبر نیست: ${e.message ?: "خطای ساختار"}")
+            return false
+        }
+    }
+
+    fun startVpnService() {
+        val intent = Intent(context, EagleVpnService::class.java).apply {
+            action = EagleVpnService.ACTION_START
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
+    }
+
+    val vpnPermissionLauncher = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            startVpnService()
+            message("درخواست شروع سرویس VPN ارسال شد.")
+        } else {
+            message("مجوز VPN داده نشد.")
+        }
+    }
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
     fun message(text: String) {
         scope.launch { snack.showSnackbar(text) }
+    }
+    val qrScanner = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val value = result.contents?.trim().orEmpty()
+        val supported = value.startsWith("{") ||
+            value.startsWith("vless://") ||
+            value.startsWith("vmess://") ||
+            value.startsWith("hysteria2://") ||
+            value.startsWith("trojan://") ||
+            value.startsWith("ss://")
+        if (supported) {
+            if (!profiles.contains(value)) {
+                profiles.add(value)
+                preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
+            }
+            draft = value
+            selectedProfile = value
+            message("QR خوانده شد؛ پروفایل ذخیره شد.")
+        } else if (value.isNotBlank()) {
+            message("QR خوانده شد، اما لینک پشتیبانی‌شده‌ای نبود.")
+        }
     }
 
     MaterialTheme(
@@ -164,7 +241,14 @@ private fun EagleScreen() {
                             Spacer(Modifier.height(18.dp))
                             Button(
                                 onClick = {
-                                    message("اتصال واقعی هنوز فعال نیست؛ ابتدا سرویس VPN و موتور sing-box باید پیاده‌سازی و آزمایش شوند.")
+                                    if (saveSingBoxConfig()) {
+                                        val permissionIntent = VpnService.prepare(context)
+                                        if (permissionIntent == null) {
+                                            startVpnService()
+                                        } else {
+                                            vpnPermissionLauncher.launch(permissionIntent)
+                                        }
+                                    }
                                 },
                                 modifier = Modifier.fillMaxWidth().height(54.dp),
                                 shape = RoundedCornerShape(16.dp),
@@ -235,13 +319,17 @@ private fun EagleScreen() {
                                 Button(
                                     onClick = {
                                         val value = draft.trim()
-                                        if (value.startsWith("vless://") ||
+                                        if (value.trimStart().startsWith("{") || value.startsWith("vless://") ||
                                             value.startsWith("vmess://") ||
                                             value.startsWith("hysteria2://") ||
                                             value.startsWith("trojan://") ||
                                             value.startsWith("ss://")
                                         ) {
-                                            if (!profiles.contains(value)) profiles.add(value)
+                                            if (!profiles.contains(value)) {
+                                                profiles.add(value)
+                                                preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
+                                            }
+                                            selectedProfile = value
                                             draft = ""
                                             message("پروفایل به فهرست محلی اضافه شد.")
                                         } else {
@@ -259,13 +347,20 @@ private fun EagleScreen() {
                             }
                             Spacer(Modifier.height(8.dp))
                             OutlinedButton(
-                                onClick = { message("اسکن QR هنوز به ماژول دوربین نیاز دارد.") },
+                                onClick = {
+                                    qrScanner.launch(
+                                        ScanOptions()
+                                            .setPrompt("QR لینک سرور را روبه‌روی دوربین بگیرید")
+                                            .setBeepEnabled(false)
+                                            .setOrientationLocked(false)
+                                    )
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
                                 Spacer(Modifier.width(8.dp))
-                                Text("اسکن QR کد (در حال آماده‌سازی)")
+                                Text("اسکن QR کد")
                             }
                         }
                         Spacer(Modifier.height(14.dp))
@@ -289,6 +384,7 @@ private fun EagleScreen() {
                                         }
                                         IconButton(onClick = {
                                             profiles.remove(item)
+                                            preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
                                             message("پروفایل حذف شد.")
                                         }) {
                                             Icon(Icons.Filled.Delete, contentDescription = "حذف", tint = Red)
@@ -310,7 +406,7 @@ private fun EagleScreen() {
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text("ذخیره‌سازی فعلی در حافظه همین صفحه است؛ اتصال این پروفایل‌ها هنوز فعال نیست.", color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center)
+                        Text("برای شروع، کانفیگ JSON استاندارد sing-box وارد یا با QR اسکن کنید. لینک‌های اشتراکی هنوز به تبدیل نیاز دارند.", color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center)
                     }
 
                     "آمار" -> {
