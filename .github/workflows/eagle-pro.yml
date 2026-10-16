@@ -39,7 +39,7 @@ jobs:
           unzip -t eagle-pro/app/libs/libbox.aar
 
       - name: Build debug APK
-        run: gradle --no-daemon -p eagle-pro :app:assembleDebug
+        run: cd eagle-pro && gradle --no-daemon assembleDebug
 
       - name: Upload EAGLE PRO APK
         uses: actions/upload-artifact@v4
