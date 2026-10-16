@@ -1,0 +1,50 @@
+name: Build EAGLE PRO APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Install Android SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Download libbox AAR
+        run: |
+          mkdir -p eagle-pro/app/libs
+          curl --fail --location --retry 3 \
+            --output eagle-pro/app/libs/libbox.aar \
+            https://github.com/singbox-android/libbox/releases/download/1.14.1/libbox.aar
+          test -s eagle-pro/app/libs/libbox.aar
+          unzip -t eagle-pro/app/libs/libbox.aar
+
+      - name: Build debug APK
+        run: gradle --no-daemon -p eagle-pro :app:assembleDebug
+
+      - name: Upload EAGLE PRO APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: eagle-pro-apk
+          path: eagle-pro/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
