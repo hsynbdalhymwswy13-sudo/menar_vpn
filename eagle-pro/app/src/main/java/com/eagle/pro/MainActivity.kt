@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import androidx.compose.foundation.clickable
 
 private val Red = Color(0xFFFF3045)
 private val Night = Color(0xFF070B14)
@@ -77,19 +78,22 @@ private fun EagleScreen() {
     }
 
     fun saveSingBoxConfig(): Boolean {
-        val config = selectedProfile.ifBlank { draft.trim() }
-        if (!config.trimStart().startsWith("{")) {
-            message("برای اتصال واقعی، فعلاً کانفیگ JSON استاندارد sing-box وارد کنید؛ لینک‌های VLESS و VMess هنوز به تبدیل نیاز دارند.")
+        val input = draft.trim().ifBlank { selectedProfile.trim() }
+        if (input.isBlank()) {
+            message("ابتدا از بخش سرورها یک پروفایل انتخاب یا وارد کنید.")
             return false
         }
-        try {
+        return try {
+            val config = EagleConfigConverter.convert(input)
             JSONObject(config)
             File(context.filesDir, "config.json").writeText(config)
             File(context.filesDir, "profile-imported.flag").writeText("1")
-            return true
+            selectedProfile = input
+            message("کانفیگ تبدیل و ذخیره شد؛ در حال بررسی و راه‌اندازی موتور VPN.")
+            true
         } catch (e: Exception) {
-            message("JSON معتبر نیست: ${e.message ?: "خطای ساختار"}")
-            return false
+            message("کانفیگ قابل استفاده نیست: ${e.message ?: e.javaClass.simpleName}")
+            false
         }
     }
 
@@ -377,7 +381,16 @@ private fun EagleScreen() {
                         } else {
                             profiles.forEachIndexed { index, item ->
                                 PanelCard {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                selectedProfile = item
+                                                draft = ""
+                                                message("پروفایل ${index + 1} انتخاب شد؛ برای اتصال، دکمه اتصال را بزنید.")
+                                            },
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Icon(Icons.Filled.Dns, contentDescription = null, tint = Red, modifier = Modifier.size(28.dp))
                                         Spacer(Modifier.width(10.dp))
                                         Column(Modifier.weight(1f)) {
@@ -408,7 +421,7 @@ private fun EagleScreen() {
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text("برای شروع، کانفیگ JSON استاندارد sing-box وارد یا با QR اسکن کنید. لینک‌های اشتراکی هنوز به تبدیل نیاز دارند.", color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center)
+                        Text("JSON، VLESS، VMess، Trojan، Shadowsocks و Hysteria2: پروفایل را انتخاب کنید و اتصال را بزنید. پشتیبانی نهایی به سازگاری کانفیگ با موتور sing-box بستگی دارد.", color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center)
                     }
 
                     "آمار" -> {

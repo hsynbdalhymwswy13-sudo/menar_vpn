@@ -1,4 +1,6 @@
 .gradle/
 build/
 app/build/
-app/libs/libbox.aar
+app/libs/
+
+/eagle-pro/app/libs/libbox.aar
