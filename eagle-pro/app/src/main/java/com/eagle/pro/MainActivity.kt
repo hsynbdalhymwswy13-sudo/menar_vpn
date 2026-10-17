@@ -69,6 +69,13 @@ private fun EagleScreen() {
     val clipboard = LocalClipboardManager.current
     var selectedProfile by remember { mutableStateOf(profiles.firstOrNull().orEmpty()) }
 
+    val snack = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    fun message(text: String) {
+        scope.launch { snack.showSnackbar(text) }
+    }
+
     fun saveSingBoxConfig(): Boolean {
         val config = selectedProfile.ifBlank { draft.trim() }
         if (!config.trimStart().startsWith("{")) {
@@ -107,12 +114,7 @@ private fun EagleScreen() {
             message("مجوز VPN داده نشد.")
         }
     }
-    val snack = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
-    fun message(text: String) {
-        scope.launch { snack.showSnackbar(text) }
-    }
     val qrScanner = rememberLauncherForActivityResult(ScanContract()) { result ->
         val value = result.contents?.trim().orEmpty()
         val supported = value.startsWith("{") ||
