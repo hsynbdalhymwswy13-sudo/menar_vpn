@@ -39,10 +39,12 @@ class EagleVpnService : VpnService(), CommandServerHandler {
         }
 
         override fun disconnected(message: String?) {
-            sendStatus(
-                "ENGINE_STARTED",
-                message ?: "Status monitor disconnected; remote connectivity is not verified"
-            )
+            if (statusClient != null && commandServer != null) {
+                sendStatus(
+                    "ENGINE_STARTED",
+                    "Status monitor disconnected; VPN engine state is not confirmed"
+                )
+            }
         }
 
         override fun writeStatus(message: StatusMessage) {
@@ -89,7 +91,7 @@ class EagleVpnService : VpnService(), CommandServerHandler {
                 android.util.Log.e(TAG, "libbox status client failed", e)
                 if (statusClient === client) {
                     sendStatus(
-                        "ENGINE_STARTED",
+                        "STATUS_UNAVAILABLE",
                         "Status monitor unavailable: ${e.message ?: e.javaClass.simpleName}"
                     )
                 }
