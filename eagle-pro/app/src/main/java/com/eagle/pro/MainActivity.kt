@@ -8,6 +8,10 @@ import android.content.IntentFilter
 import android.net.VpnService
 import android.os.Build
 import org.json.JSONObject
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.net.URI
+import java.util.concurrent.Executors
 import java.io.File
 import android.content.Context
 import androidx.activity.ComponentActivity
@@ -96,6 +100,62 @@ private val vpnUiUpload = mutableStateOf(0L)
 private val vpnUiDownloadTotal = mutableStateOf(0L)
 private val vpnUiUploadTotal = mutableStateOf(0L)
 
+
+private val eaglePingExecutor = Executors.newFixedThreadPool(3)
+
+private fun tcpLatency(profile: String, callback: (String) -> Unit) {
+    eaglePingExecutor.execute {
+        val result = try {
+            val value = profile.trim()
+            val endpoint = if (value.startsWith("{")) {
+                val root = org.json.JSONObject(value)
+                val outbounds = root.optJSONArray("outbounds")
+                    ?: throw IllegalArgumentException("outbounds پیدا نشد")
+                var found: org.json.JSONObject? = null
+                for (i in 0 until outbounds.length()) {
+                    val item = outbounds.optJSONObject(i) ?: continue
+                    if (item.optString("type") in setOf(
+                            "vless", "vmess", "trojan", "shadowsocks",
+                            "hysteria2", "tuic", "socks", "http"
+                        )
+                    ) {
+                        found = item
+                        break
+                    }
+                }
+                val item = found ?: throw IllegalArgumentException("سرور قابل‌شناسایی نیست")
+                item.optString("server") to item.optInt("server_port", 0)
+            } else {
+                val uri = URI(value)
+                val host = uri.host ?: throw IllegalArgumentException("آدرس سرور نامعتبر است")
+                val port = if (uri.port > 0) uri.port else when (uri.scheme?.lowercase()) {
+                    "https" -> 443
+                    "http" -> 80
+                    else -> 0
+                }
+                host to port
+            }
+
+            val (host, port) = endpoint
+            require(host.isNotBlank() && port in 1..65535) {
+                "میزبان یا پورت معتبر نیست"
+            }
+
+            val start = System.nanoTime()
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(host, port), 3500)
+            }
+            val ms = (System.nanoTime() - start) / 1_000_000
+            "${ms} ms · TCP"
+        } catch (e: Exception) {
+            "ناموفق"
+        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            callback(result)
+        }
+    }
+}
+
 private fun formatTraffic(bytes: Long): String {
     if (bytes < 1024) return "$bytes B"
     val units = arrayOf("KB", "MB", "GB", "TB")
@@ -131,6 +191,7 @@ private fun EagleScreen() {
     }
     val clipboard = LocalClipboardManager.current
     var selectedProfile by remember { mutableStateOf(profiles.firstOrNull().orEmpty()) }
+    val latencyResults = remember { mutableStateMapOf<String, String>() }
 
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -458,6 +519,22 @@ private fun EagleScreen() {
                                         Column(Modifier.weight(1f)) {
                                             Text("پروفایل ${index + 1}", fontWeight = FontWeight.Bold)
                                             Text(item.take(48), color = Muted, fontSize = 11.sp, maxLines = 1)
+                                        }
+                                        Column {
+                                            Text(
+                                                latencyResults[item] ?: "تأخیر: تست نشده",
+                                                color = Muted,
+                                                fontSize = 11.sp
+                                            )
+                                            TextButton(onClick = {
+                                                latencyResults[item] = "در حال تست…"
+                                                tcpLatency(item) { result ->
+                                                    latencyResults[item] = result
+                                                }
+                                            }) {
+                                                Icon(Icons.Filled.NetworkCheck, contentDescription = null)
+                                                Text("تست تأخیر")
+                                            }
                                         }
                                         IconButton(onClick = {
                                             profiles.remove(item)
