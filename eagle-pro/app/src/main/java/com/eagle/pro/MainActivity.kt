@@ -3,6 +3,8 @@ package com.eagle.pro
 import android.os.Bundle
 import android.app.Activity
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.net.VpnService
 import android.os.Build
 import org.json.JSONObject
@@ -46,14 +48,74 @@ private val Muted = Color(0xFF94A3B8)
 private val Green = Color(0xFF32D583)
 
 class MainActivity : ComponentActivity() {
+    private var vpnStatusReceiver: BroadcastReceiver? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { EagleScreen() }
     }
+
+    override fun onStart() {
+        super.onStart()
+        if (vpnStatusReceiver != null) return
+        vpnStatusReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action != EagleVpnService.ACTION_STATUS) return
+                val status = intent.getStringExtra("status") ?: return
+                val message = intent.getStringExtra("message").orEmpty()
+                vpnUiStatus.value = status
+                vpnUiMessage.value = message
+                vpnUiDownload.value = intent.getLongExtra("downlink", 0L).coerceAtLeast(0L)
+                vpnUiUpload.value = intent.getLongExtra("uplink", 0L).coerceAtLeast(0L)
+                vpnUiDownloadTotal.value = intent.getLongExtra("downlinkTotal", 0L).coerceAtLeast(0L)
+                vpnUiUploadTotal.value = intent.getLongExtra("uplinkTotal", 0L).coerceAtLeast(0L)
+            }
+        }
+        val filter = IntentFilter(EagleVpnService.ACTION_STATUS)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(vpnStatusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(vpnStatusReceiver, filter)
+        }
+    }
+
+    override fun onStop() {
+        vpnStatusReceiver?.let {
+            try { unregisterReceiver(it) } catch (_: Exception) {}
+        }
+        vpnStatusReceiver = null
+        super.onStop()
+    }
+}
+
+private val vpnUiStatus = mutableStateOf("READY")
+private val vpnUiMessage = mutableStateOf("آماده اتصال")
+private val vpnUiDownload = mutableStateOf(0L)
+private val vpnUiUpload = mutableStateOf(0L)
+private val vpnUiDownloadTotal = mutableStateOf(0L)
+private val vpnUiUploadTotal = mutableStateOf(0L)
+
+private fun formatTraffic(bytes: Long): String {
+    if (bytes < 1024) return "$bytes B"
+    val units = arrayOf("KB", "MB", "GB", "TB")
+    var value = bytes.toDouble()
+    var index = -1
+    do {
+        value /= 1024.0
+        index++
+    } while (value >= 1024 && index < units.lastIndex)
+    return String.format(java.util.Locale.US, "%.1f %s", value, units[index.coerceAtMost(units.lastIndex)])
 }
 
 @Composable
 private fun EagleScreen() {
+    val serviceStatus = vpnUiStatus.value
+    val serviceMessage = vpnUiMessage.value
+    val downloadBytes = vpnUiDownload.value
+    val uploadBytes = vpnUiUpload.value
+    val downloadTotal = vpnUiDownloadTotal.value
+    val uploadTotal = vpnUiUploadTotal.value
     var page by remember { mutableStateOf("خانه") }
     var draft by remember { mutableStateOf("") }
     var autoConnect by remember { mutableStateOf(false) }
@@ -219,7 +281,7 @@ private fun EagleScreen() {
                                 Spacer(Modifier.width(8.dp))
                                 Text("وضعیت اتصال", color = Muted, fontSize = 13.sp)
                                 Spacer(Modifier.weight(1f))
-                                Text("آماده راه‌اندازی", color = Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(when (serviceStatus) { "ENGINE_STARTED" -> "موتور فعال"; "STATUS_MONITOR_CONNECTED" -> "سرویس فعال"; "ERROR" -> "خطا"; "STATUS_UNAVAILABLE" -> "وضعیت نامشخص"; else -> "آماده اتصال" }, color = if (serviceStatus == "ERROR") Red else if (serviceStatus == "ENGINE_STARTED" || serviceStatus == "STATUS_MONITOR_CONNECTED") Green else Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                             Spacer(Modifier.height(22.dp))
                             Box(
@@ -241,7 +303,7 @@ private fun EagleScreen() {
                             Text("اتصال امن خود را مدیریت کنید", fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "موتور sing-box هنوز به سرویس VPN متصل نشده است.",
+                                if (serviceMessage.isNotBlank()) serviceMessage else "برای شروع، یک پروفایل معتبر انتخاب کنید.",
                                 color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center
                             )
                             Spacer(Modifier.height(18.dp))
@@ -278,8 +340,8 @@ private fun EagleScreen() {
 
                         Spacer(Modifier.height(14.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            MetricCard("دانلود", "۰ B", Icons.Filled.Download, Modifier.weight(1f))
-                            MetricCard("آپلود", "۰ B", Icons.Filled.Upload, Modifier.weight(1f))
+                            MetricCard("دانلود", formatTraffic(downloadTotal.takeIf { it > 0 } ?: downloadBytes), Icons.Filled.Download, Modifier.weight(1f))
+                            MetricCard("آپلود", formatTraffic(uploadTotal.takeIf { it > 0 } ?: uploadBytes), Icons.Filled.Upload, Modifier.weight(1f))
                         }
                         Spacer(Modifier.height(12.dp))
                         PanelCard {
@@ -288,7 +350,7 @@ private fun EagleScreen() {
                                 Spacer(Modifier.width(10.dp))
                                 Column {
                                     Text("وضعیت موتور VPN", fontWeight = FontWeight.Bold)
-                                    Text("راه‌اندازی نشده · اتصال برقرار نیست", color = Muted, fontSize = 12.sp)
+                                    Text(when (serviceStatus) { "ERROR" -> "خطا: ${serviceMessage.ifBlank { "علت نامشخص" }}"; "ENGINE_STARTED", "STATUS_MONITOR_CONNECTED" -> serviceMessage.ifBlank { "موتور اجرا شده؛ دسترسی اینترنت هنوز تأیید نشده است." }; "STATUS_UNAVAILABLE" -> serviceMessage.ifBlank { "وضعیت موتور تأیید نشده است." }; else -> "سرویس VPN هنوز راه‌اندازی نشده است." }, color = Muted, fontSize = 12.sp)
                                 }
                             }
                         }
@@ -425,17 +487,17 @@ private fun EagleScreen() {
                     }
 
                     "آمار" -> {
-                        SectionTitle("آمار ترافیک", "آمار زنده پس از راه‌اندازی موتور در دسترس خواهد بود")
+                        SectionTitle("آمار ترافیک", if (serviceStatus == "ENGINE_STARTED" || serviceStatus == "STATUS_MONITOR_CONNECTED") "داده‌های گزارش‌شده توسط موتور sing-box" else "هنوز آمار زنده‌ای دریافت نشده است")
                         PanelCard {
                             Icon(Icons.Filled.BarChart, contentDescription = null, tint = Red, modifier = Modifier.size(38.dp))
                             Spacer(Modifier.height(12.dp))
-                            Text("هنوز داده‌ای ثبت نشده", fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                            Text("اتصال VPN برقرار نیست؛ آمار فعلاً صفر است.", color = Muted, fontSize = 12.sp)
+                            Text(if (serviceStatus == "ERROR") "خطا در راه‌اندازی موتور" else if (downloadBytes > 0 || uploadBytes > 0 || downloadTotal > 0 || uploadTotal > 0) "آمار موتور دریافت شد" else "هنوز داده‌ای ثبت نشده", fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                            Text(serviceMessage.ifBlank { "آمار فقط در صورت گزارش موتور نمایش داده می‌شود؛ اتصال اینترنت از این پیام به‌تنهایی تأیید نمی‌شود." }, color = Muted, fontSize = 12.sp)
                         }
                         Spacer(Modifier.height(12.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            MetricCard("دریافت", "۰ B", Icons.Filled.Download, Modifier.weight(1f))
-                            MetricCard("ارسال", "۰ B", Icons.Filled.Upload, Modifier.weight(1f))
+                            MetricCard("دریافت", formatTraffic(downloadTotal.takeIf { it > 0 } ?: downloadBytes), Icons.Filled.Download, Modifier.weight(1f))
+                            MetricCard("ارسال", formatTraffic(uploadTotal.takeIf { it > 0 } ?: uploadBytes), Icons.Filled.Upload, Modifier.weight(1f))
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
