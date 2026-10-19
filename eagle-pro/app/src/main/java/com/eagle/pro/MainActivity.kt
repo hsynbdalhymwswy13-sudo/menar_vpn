@@ -462,6 +462,38 @@ private fun EagleScreen() {
                         }
                         Spacer(Modifier.height(12.dp))
                         PanelCard {
+                            Column {
+                                Text("گزارش عیب‌یابی", fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    "گزارش داخلی موتور را برای بررسی مشکل کپی کنید.",
+                                    color = Muted,
+                                    fontSize = 12.sp
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        val logFile = File(context.filesDir, "eagle-engine.log")
+                                        val report = try {
+                                            if (logFile.isFile) logFile.readText().takeLast(24000)
+                                            else "هنوز گزارش داخلی ثبت نشده است."
+                                        } catch (e: Exception) {
+                                            "خطا در خواندن گزارش: ${e.message}"
+                                        }
+                                        clipboard.setText(AnnotatedString(report))
+                                        message("گزارش عیب‌یابی در کلیپ‌بورد کپی شد.")
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Filled.ContentCopy, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("کپی گزارش عیب‌یابی")
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+
+                        PanelCard {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.Info, contentDescription = null, tint = Red)
                                 Spacer(Modifier.width(10.dp))

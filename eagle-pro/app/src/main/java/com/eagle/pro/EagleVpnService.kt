@@ -33,15 +33,15 @@ class EagleVpnService : VpnService(), CommandServerHandler {
     private val statusHandler = object : CommandClientHandler {
         override fun connected() {
             sendStatus(
-                "ENGINE_STARTED",
-                "libbox status monitor connected; remote connectivity is not verified"
+                "STATUS_MONITOR_CONNECTED",
+                "Status monitor connected; remote connectivity is not verified"
             )
         }
 
         override fun disconnected(message: String?) {
             if (statusClient != null && commandServer != null) {
                 sendStatus(
-                    "ENGINE_STARTED",
+                    "STATUS_UNAVAILABLE",
                     "Status monitor disconnected; VPN engine state is not confirmed"
                 )
             }
