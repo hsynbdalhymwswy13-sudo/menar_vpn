@@ -171,6 +171,7 @@ private fun formatTraffic(bytes: Long): String {
 @Composable
 private fun EagleScreen() {
     val serviceStatus = vpnUiStatus.value
+    // eagle-connected-duration: live elapsed time while engine is running
     val serviceMessage = vpnUiMessage.value
     val downloadBytes = vpnUiDownload.value
     val uploadBytes = vpnUiUpload.value
@@ -178,19 +179,49 @@ private fun EagleScreen() {
     val uploadTotal = vpnUiUploadTotal.value
     var page by remember { mutableStateOf("خانه") }
     var draft by remember { mutableStateOf("") }
-    var autoConnect by remember { mutableStateOf(false) }
-    var autoReconnect by remember { mutableStateOf(true) }
-    var killSwitch by remember { mutableStateOf(false) }
-    var splitTunnel by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    // eagle-connected-duration
+    var durationNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val runtimePrefs = remember {
+        context.getSharedPreferences("eagle_runtime", Context.MODE_PRIVATE)
+    }
+    var connectedSince by remember { mutableLongStateOf(
+        runtimePrefs.getLong("connectedSince", 0L)
+    ) }
+
+    LaunchedEffect(serviceStatus) {
+        val active = serviceStatus == "ENGINE_STARTED" ||
+            serviceStatus == "STATUS_MONITOR_CONNECTED"
+        connectedSince = if (active) {
+            runtimePrefs.getLong("connectedSince", 0L)
+        } else {
+            0L
+        }
+        while (active) {
+            durationNow = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
+    val elapsedSeconds = if (connectedSince > 0L &&
+        (serviceStatus == "ENGINE_STARTED" || serviceStatus == "STATUS_MONITOR_CONNECTED")) {
+        ((durationNow - connectedSince).coerceAtLeast(0L) / 1000L)
+    } else 0L
+    val durationText = "%02d:%02d:%02d".format(
+        elapsedSeconds / 3600, (elapsedSeconds % 3600) / 60, elapsedSeconds % 60
+    )
     val preferences = remember { context.getSharedPreferences("eagle_profiles", Context.MODE_PRIVATE) }
+    var autoConnect by remember { mutableStateOf(preferences.getBoolean("autoConnect", false)) }
+    var autoReconnect by remember { mutableStateOf(preferences.getBoolean("autoReconnect", true)) }
+    var killSwitch by remember { mutableStateOf(preferences.getBoolean("killSwitch", false)) }
+    var splitTunnel by remember { mutableStateOf(preferences.getBoolean("splitTunnel", false)) }
     val profiles = remember {
         mutableStateListOf<String>().apply {
             addAll(preferences.getStringSet("profiles", emptySet()).orEmpty())
         }
     }
     val clipboard = LocalClipboardManager.current
-    var selectedProfile by remember { mutableStateOf(profiles.firstOrNull().orEmpty()) }
+    var selectedProfile by remember { mutableStateOf(preferences.getString("selectedProfile", profiles.firstOrNull().orEmpty()).orEmpty().ifBlank { profiles.firstOrNull().orEmpty() }) }
     val latencyResults = remember { mutableStateMapOf<String, String>() }
 
     val snack = remember { SnackbarHostState() }
@@ -212,6 +243,7 @@ private fun EagleScreen() {
             File(context.filesDir, "config.json").writeText(config)
             File(context.filesDir, "profile-imported.flag").writeText("1")
             selectedProfile = input
+            preferences.edit().putString("selectedProfile", selectedProfile).apply()
             message("کانفیگ تبدیل و ذخیره شد؛ در حال بررسی و راه‌اندازی موتور VPN.")
             true
         } catch (e: Exception) {
@@ -242,6 +274,58 @@ private fun EagleScreen() {
         }
     }
 
+    // eagle-file-import-launcher: import config/profile files from device storage
+    // eagle-auto-connect-on-open: start only with a saved config and user preference
+    var autoConnectHandled by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!autoConnectHandled) {
+            autoConnectHandled = true
+            if (autoConnect) {
+                val configFile = File(context.filesDir, "config.json")
+                val importedFlag = File(context.filesDir, "profile-imported.flag")
+                if (configFile.isFile && configFile.length() > 0L && importedFlag.exists()) {
+                    val permissionIntent = VpnService.prepare(context)
+                    if (permissionIntent == null) {
+                        startVpnService()
+                        message("اتصال خودکار: درخواست شروع موتور VPN ارسال شد.")
+                    } else {
+                        vpnPermissionLauncher.launch(permissionIntent)
+                    }
+                } else {
+                    message("برای اتصال خودکار ابتدا یک کانفیگ معتبر ذخیره کنید.")
+                }
+            }
+        }
+    }
+
+    val fileImporter = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val imported = context.contentResolver.openInputStream(uri)
+                    ?.bufferedReader(Charsets.UTF_8)
+                    ?.use { it.readText() }
+                    ?.trim()
+                    .orEmpty()
+                if (imported.isBlank()) {
+                    message("فایل خالی است.")
+                } else {
+                    draft = imported
+                    if (!profiles.contains(imported)) {
+                        profiles.add(imported)
+                        preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
+                    }
+                    selectedProfile = imported
+                    preferences.edit().putString("selectedProfile", selectedProfile).apply()
+                    message("فایل وارد شد؛ برای اتصال، کانفیگ را ذخیره و اجرا کنید.")
+                }
+            } catch (e: Exception) {
+                message("خواندن فایل ناموفق بود: ${e.message ?: "خطای فایل"}")
+            }
+        }
+    }
+
     val qrScanner = rememberLauncherForActivityResult(ScanContract()) { result ->
         val value = result.contents?.trim().orEmpty()
         val supported = value.startsWith("{") ||
@@ -257,6 +341,7 @@ private fun EagleScreen() {
             }
             draft = value
             selectedProfile = value
+            preferences.edit().putString("selectedProfile", selectedProfile).apply()
             message("QR خوانده شد؛ پروفایل ذخیره شد.")
         } else if (value.isNotBlank()) {
             message("QR خوانده شد، اما لینک پشتیبانی‌شده‌ای نبود.")
@@ -478,6 +563,7 @@ private fun EagleScreen() {
                                                 preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
                                             }
                                             selectedProfile = value
+                                            preferences.edit().putString("selectedProfile", selectedProfile).apply()
                                             draft = ""
                                             message("پروفایل به فهرست محلی اضافه شد.")
                                         } else {
@@ -492,6 +578,23 @@ private fun EagleScreen() {
                                     Spacer(Modifier.width(5.dp))
                                     Text("افزودن")
                                 }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    fileImporter.launch(arrayOf(
+                                        "application/json",
+                                        "text/plain",
+                                        "application/octet-stream",
+                                        "*/*"
+                                    ))
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Filled.FolderOpen, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("واردکردن فایل کانفیگ")
                             }
                             Spacer(Modifier.height(8.dp))
                             OutlinedButton(
@@ -528,6 +631,7 @@ private fun EagleScreen() {
                                             .fillMaxWidth()
                                             .clickable {
                                                 selectedProfile = item
+                                                preferences.edit().putString("selectedProfile", selectedProfile).apply()
                                                 draft = ""
                                                 message("پروفایل ${index + 1} انتخاب شد؛ برای اتصال، دکمه اتصال را بزنید.")
                                             },
@@ -557,6 +661,10 @@ private fun EagleScreen() {
                                         }
                                         IconButton(onClick = {
                                             profiles.remove(item)
+                                            if (selectedProfile == item) {
+                                                selectedProfile = profiles.firstOrNull().orEmpty()
+                                                preferences.edit().putString("selectedProfile", selectedProfile).apply()
+                                            }
                                             preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
                                             message("پروفایل حذف شد.")
                                         }) {
@@ -597,7 +705,7 @@ private fun EagleScreen() {
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            MetricCard("مدت اتصال", "۰:۰۰", Icons.Filled.Speed, Modifier.weight(1f))
+                            MetricCard("مدت اتصال", durationText, Icons.Filled.Speed, Modifier.weight(1f))
                             MetricCard("تأخیر", "— ms", Icons.Filled.NetworkCheck, Modifier.weight(1f))
                         }
                         Spacer(Modifier.height(12.dp))
@@ -610,13 +718,13 @@ private fun EagleScreen() {
                     "تنظیمات" -> {
                         SectionTitle("تنظیمات برنامه", "کنترل‌ها و گزینه‌های EAGLE PRO")
                         PanelCard {
-                            SettingRow("اتصال خودکار", "اتصال هنگام باز شدن برنامه", autoConnect, Icons.Filled.PowerSettingsNew) { autoConnect = it }
+                            SettingRow("اتصال خودکار", "اتصال هنگام باز شدن برنامه", autoConnect, Icons.Filled.PowerSettingsNew) { autoConnect = it; preferences.edit().putBoolean("autoConnect", it).apply() }
                             Divider(color = Color(0xFF283448))
-                            SettingRow("اتصال مجدد خودکار", "پس از قطع اتصال", autoReconnect, Icons.Filled.Refresh) { autoReconnect = it }
+                            SettingRow("اتصال مجدد خودکار", "پس از قطع اتصال", autoReconnect, Icons.Filled.Refresh) { autoReconnect = it; preferences.edit().putBoolean("autoReconnect", it).apply() }
                             Divider(color = Color(0xFF283448))
-                            SettingRow("Kill Switch", "جلوگیری از ترافیک خارج از VPN", killSwitch, Icons.Filled.Lock) { killSwitch = it }
+                            SettingRow("Kill Switch", "جلوگیری از ترافیک خارج از VPN", killSwitch, Icons.Filled.Lock) { killSwitch = it; preferences.edit().putBoolean("killSwitch", it).apply() }
                             Divider(color = Color(0xFF283448))
-                            SettingRow("Split Tunneling", "انتخاب برنامه‌های عبوری", splitTunnel, Icons.Filled.Tune) { splitTunnel = it }
+                            SettingRow("Split Tunneling", "انتخاب برنامه‌های عبوری", splitTunnel, Icons.Filled.Tune) { splitTunnel = it; preferences.edit().putBoolean("splitTunnel", it).apply() }
                         }
                         Spacer(Modifier.height(12.dp))
                         PanelCard {

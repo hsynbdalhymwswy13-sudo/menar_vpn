@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.VpnService
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import io.nekohasekai.libbox.CommandServer
 import io.nekohasekai.libbox.CommandServerHandler
 import io.nekohasekai.libbox.CommandClient
@@ -25,6 +27,38 @@ import io.nekohasekai.libbox.SystemProxyStatus
 import java.io.File
 
 class EagleVpnService : VpnService(), CommandServerHandler {
+
+    // eagle-reconnect-guard
+    private val reconnectHandler = Handler(Looper.getMainLooper())
+    @Volatile private var userRequestedStop = false
+    @Volatile private var reconnectAttempts = 0
+    private val reconnectTask = Runnable {
+        if (!userRequestedStop && isReconnectEnabled() && commandServer == null) {
+            try {
+                val startIntent = Intent(this, EagleVpnService::class.java).setAction(ACTION_START)
+                if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    startForegroundService(startIntent)
+                } else {
+                    startService(startIntent)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Automatic reconnect request failed", e)
+                scheduleReconnect()
+            }
+        }
+    }
+
+    private fun isReconnectEnabled(): Boolean =
+        getSharedPreferences("eagle_profiles", MODE_PRIVATE)
+            .getBoolean("autoReconnect", true)
+
+    private fun scheduleReconnect() {
+        if (userRequestedStop || !isReconnectEnabled() || reconnectAttempts >= 5) return
+        reconnectAttempts++
+        reconnectHandler.removeCallbacks(reconnectTask)
+        reconnectHandler.postDelayed(reconnectTask, reconnectAttempts * 5_000L)
+        android.util.Log.i(TAG, "Reconnect scheduled, attempt=$reconnectAttempts")
+    }
 
     private var commandServer: CommandServer? = null
     private var platform: EaglePlatform? = null
@@ -102,21 +136,31 @@ class EagleVpnService : VpnService(), CommandServerHandler {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         traceEngine("onStartCommand action=${intent?.action} startId=$startId")
         when (intent?.action) {
-            ACTION_STOP -> stopEngine()
+            ACTION_STOP -> {
+                userRequestedStop = true
+                reconnectAttempts = 0
+                reconnectHandler.removeCallbacks(reconnectTask)
+                stopEngine()
+            }
             else -> {
+                userRequestedStop = false
                 try {
                     createNotificationChannel()
                     traceEngine("creating foreground notification")
                     startForeground(NOTIFICATION_ID, buildNotification())
                     traceEngine("foreground notification started")
                     startEngine()
+                    getSharedPreferences("eagle_runtime", MODE_PRIVATE).edit().putLong("connectedSince", System.currentTimeMillis()).apply()
                     traceEngine("startEngine returned successfully")
+                    reconnectAttempts = 0
+                    reconnectHandler.removeCallbacks(reconnectTask)
                     sendStatus("ENGINE_STARTED", "VPN engine started; remote connectivity is not verified")
                 } catch (e: Exception) {
                     traceEngine("Unable to start libbox", e)
                     android.util.Log.e(TAG, "Unable to start libbox", e)
                     sendStatus("ERROR", e.message ?: "Unknown service error")
                     stopEngine()
+                    scheduleReconnect()
                 }
             }
         }
@@ -285,6 +329,7 @@ class EagleVpnService : VpnService(), CommandServerHandler {
                 android.util.Log.w(TAG, "Error closing command server", e)
             }
         }
+        getSharedPreferences("eagle_runtime", MODE_PRIVATE).edit().remove("connectedSince").apply()
         sendStatus("READY")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -307,6 +352,9 @@ class EagleVpnService : VpnService(), CommandServerHandler {
     }
 
     override fun serviceStop() {
+        userRequestedStop = true
+        reconnectAttempts = 0
+        reconnectHandler.removeCallbacks(reconnectTask)
         stopEngine()
     }
 
@@ -323,8 +371,13 @@ class EagleVpnService : VpnService(), CommandServerHandler {
     }
 
     override fun onDestroy() {
+        val unexpectedStop = !userRequestedStop && isReconnectEnabled()
+        reconnectHandler.removeCallbacks(reconnectTask)
         stopEngine()
         super.onDestroy()
+        if (unexpectedStop) {
+            scheduleReconnect()
+        }
     }
 
     override fun onBind(intent: Intent): IBinder? = super.onBind(intent)
