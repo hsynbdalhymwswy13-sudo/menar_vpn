@@ -370,7 +370,17 @@ private fun EagleScreen() {
                             Spacer(Modifier.height(18.dp))
                             Button(
                                 onClick = {
-                                    if (saveSingBoxConfig()) {
+                                    if (serviceStatus == "ENGINE_STARTED" || serviceStatus == "STATUS_MONITOR_CONNECTED") {
+                                        val stopIntent = Intent(context, EagleVpnService::class.java).apply {
+                                            action = EagleVpnService.ACTION_STOP
+                                        }
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                            context.startForegroundService(stopIntent)
+                                        } else {
+                                            context.startService(stopIntent)
+                                        }
+                                        message("درخواست قطع اتصال ارسال شد.")
+                                    } else if (saveSingBoxConfig()) {
                                         val permissionIntent = VpnService.prepare(context)
                                         if (permissionIntent == null) {
                                             startVpnService()
@@ -379,13 +389,22 @@ private fun EagleScreen() {
                                         }
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth().height(54.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Red)
+                                modifier = Modifier.fillMaxWidth().height(58.dp),
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (serviceStatus == "ENGINE_STARTED" || serviceStatus == "STATUS_MONITOR_CONNECTED") Color(0xFF263244) else Red
+                                )
                             ) {
-                                Icon(Icons.Filled.PowerSettingsNew, contentDescription = null)
+                                Icon(
+                                    if (serviceStatus == "ENGINE_STARTED" || serviceStatus == "STATUS_MONITOR_CONNECTED") Icons.Filled.Close else Icons.Filled.PowerSettingsNew,
+                                    contentDescription = null
+                                )
                                 Spacer(Modifier.width(9.dp))
-                                Text("شروع اتصال", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    if (serviceStatus == "ENGINE_STARTED" || serviceStatus == "STATUS_MONITOR_CONNECTED") "قطع اتصال" else "اتصال به سرور",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                             Spacer(Modifier.height(9.dp))
                             OutlinedButton(
