@@ -31,6 +31,7 @@ class EagleVpnService : VpnService(), CommandServerHandler {
     // eagle-reconnect-guard
     private val reconnectHandler = Handler(Looper.getMainLooper())
     @Volatile private var userRequestedStop = false
+    private var preserveErrorStatus = false
     @Volatile private var reconnectAttempts = 0
     private val reconnectTask = Runnable {
         if (!userRequestedStop && isReconnectEnabled() && commandServer == null) {
@@ -144,6 +145,7 @@ class EagleVpnService : VpnService(), CommandServerHandler {
             }
             else -> {
                 userRequestedStop = false
+                preserveErrorStatus = false
                 try {
                     createNotificationChannel()
                     traceEngine("creating foreground notification")
@@ -158,8 +160,9 @@ class EagleVpnService : VpnService(), CommandServerHandler {
                 } catch (e: Exception) {
                     traceEngine("Unable to start libbox", e)
                     android.util.Log.e(TAG, "Unable to start libbox", e)
+                    preserveErrorStatus = true
+                    stopEngine(publishReady = false)
                     sendStatus("ERROR", e.message ?: "Unknown service error")
-                    stopEngine()
                     scheduleReconnect()
                 }
             }
@@ -302,7 +305,7 @@ class EagleVpnService : VpnService(), CommandServerHandler {
     }
 
     @Synchronized
-    private fun stopEngine() {
+    private fun stopEngine(publishReady: Boolean = true) {
         val client = statusClient
         statusClient = null
         if (client != null) {
@@ -330,7 +333,7 @@ class EagleVpnService : VpnService(), CommandServerHandler {
             }
         }
         getSharedPreferences("eagle_runtime", MODE_PRIVATE).edit().remove("connectedSince").apply()
-        sendStatus("READY")
+        if (publishReady) sendStatus("READY")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -373,7 +376,7 @@ class EagleVpnService : VpnService(), CommandServerHandler {
     override fun onDestroy() {
         val unexpectedStop = !userRequestedStop && isReconnectEnabled()
         reconnectHandler.removeCallbacks(reconnectTask)
-        stopEngine()
+        stopEngine(publishReady = !preserveErrorStatus)
         super.onDestroy()
         if (unexpectedStop) {
             scheduleReconnect()
