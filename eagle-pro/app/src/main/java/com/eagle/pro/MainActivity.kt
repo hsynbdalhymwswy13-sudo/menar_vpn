@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -44,12 +45,12 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import androidx.compose.foundation.clickable
 
-private val Red = Color(0xFFFF3045)
-private val Night = Color(0xFF070B14)
-private val Panel = Color(0xFF111827)
-private val Panel2 = Color(0xFF172235)
-private val Muted = Color(0xFF94A3B8)
-private val Green = Color(0xFF32D583)
+private val Red = Color(0xFF13B887)
+private val Night = Color(0xFF0D0F0E)
+private val Panel = Color(0xFF171B19)
+private val Panel2 = Color(0xFF222923)
+private val Muted = Color(0xFFB5B9B2)
+private val Green = Color(0xFFD6B46A)
 
 class MainActivity : ComponentActivity() {
     private var vpnStatusReceiver: BroadcastReceiver? = null
@@ -178,6 +179,8 @@ private fun EagleScreen() {
     val downloadTotal = vpnUiDownloadTotal.value
     val uploadTotal = vpnUiUploadTotal.value
     var page by remember { mutableStateOf("خانه") }
+    var filterRunning by remember { mutableStateOf(false) }
+    var filterSummary by remember { mutableStateOf("آماده بررسی کانفیگ‌ها") }
     var draft by remember { mutableStateOf("") }
     val context = LocalContext.current
     // eagle-connected-duration
@@ -615,7 +618,98 @@ private fun EagleScreen() {
                             }
                         }
                         Spacer(Modifier.height(14.dp))
-                        SectionTitle("پروفایل‌های ذخیره‌شده", "${profiles.size} پروفایل")
+
+PanelCard {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Filled.FilterAlt, contentDescription = null, tint = Green)
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text("فیلتر هوشمند", fontWeight = FontWeight.Bold)
+            Text("حذف تکراری‌ها و تست پاسخ TCP", color = Muted, fontSize = 11.sp)
+        }
+        Button(
+            onClick = {
+                if (profiles.isEmpty()) {
+                    message("ابتدا کانفیگ اضافه کنید.")
+                } else if (!filterRunning) {
+                    val unique = profiles.distinct()
+                    val supported = unique.filter { raw ->
+                        val v = raw.trimStart()
+                        v.startsWith("{") ||
+                        listOf("vless://", "vmess://", "trojan://", "ss://",
+                            "hysteria2://", "tuic://").any { v.startsWith(it) }
+                    }
+                    profiles.clear()
+                    profiles.addAll(supported)
+                    preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
+
+                    if (selectedProfile !in profiles) {
+                        selectedProfile = profiles.firstOrNull().orEmpty()
+                        preferences.edit().putString("selectedProfile", selectedProfile).apply()
+                    }
+
+                    if (profiles.isEmpty()) {
+                        filterSummary = "کانفیگ پشتیبانی‌شده‌ای پیدا نشد."
+                        message(filterSummary)
+                    } else {
+                        filterRunning = true
+                        filterSummary = "در حال تست ${profiles.size} سرور…"
+                        val candidates = profiles.toList()
+                        val completed = java.util.concurrent.atomic.AtomicInteger(0)
+                        val results = java.util.Collections.synchronizedList(
+                            mutableListOf<Pair<String, Long>>()
+                        )
+
+                        candidates.forEach { candidate ->
+                            latencyResults[candidate] = "در حال تست…"
+                            tcpLatency(candidate) { result ->
+                                latencyResults[candidate] = result
+                                Regex("""(\d+)\s*ms""").find(result)
+                                    ?.groupValues?.get(1)?.toLongOrNull()
+                                    ?.let { results.add(candidate to it) }
+
+                                if (completed.incrementAndGet() == candidates.size) {
+                                    val ranked = synchronized(results) {
+                                        results.sortedBy { it.second }
+                                    }
+                                    filterRunning = false
+                                    if (ranked.isNotEmpty()) {
+                                        selectedProfile = ranked.first().first
+                                        preferences.edit()
+                                            .putString("selectedProfile", selectedProfile).apply()
+                                        filterSummary =
+                                            "${ranked.size} سرور پاسخ TCP داد؛ کمترین تأخیر ${ranked.first().second} ms"
+                                        message("سرور با کمترین تأخیر TCP انتخاب شد. برای اتصال، دکمه اتصال را بزنید.")
+                                    } else {
+                                        filterSummary = "هیچ سروری پاسخ TCP نداد."
+                                        message(filterSummary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            enabled = !filterRunning,
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Red)
+        ) {
+            Icon(Icons.Filled.FilterAlt, contentDescription = null)
+            Spacer(Modifier.width(4.dp))
+            Text(if (filterRunning) "در حال تست" else "شروع")
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(filterSummary, color = Green, fontSize = 12.sp)
+    Text(
+        "پاسخ TCP به‌تنهایی سلامت اینترنت از داخل تونل VPN را ثابت نمی‌کند.",
+        color = Muted,
+        fontSize = 11.sp
+    )
+}
+Spacer(Modifier.height(12.dp))
+
+SectionTitle("پروفایل‌های ذخیره‌شده", "${profiles.size} پروفایل")
                         if (profiles.isEmpty()) {
                             PanelCard {
                                 Icon(Icons.Filled.Dns, contentDescription = null, tint = Muted, modifier = Modifier.size(34.dp))
@@ -719,11 +813,11 @@ private fun EagleScreen() {
                         SectionTitle("تنظیمات برنامه", "کنترل‌ها و گزینه‌های EAGLE PRO")
                         PanelCard {
                             SettingRow("اتصال خودکار", "اتصال هنگام باز شدن برنامه", autoConnect, Icons.Filled.PowerSettingsNew) { autoConnect = it; preferences.edit().putBoolean("autoConnect", it).apply() }
-                            Divider(color = Color(0xFF283448))
+                            Divider(color = Color(0xFF354239))
                             SettingRow("اتصال مجدد خودکار", "پس از قطع اتصال", autoReconnect, Icons.Filled.Refresh) { autoReconnect = it; preferences.edit().putBoolean("autoReconnect", it).apply() }
-                            Divider(color = Color(0xFF283448))
+                            Divider(color = Color(0xFF354239))
                             SettingRow("Kill Switch", "جلوگیری از ترافیک خارج از VPN", killSwitch, Icons.Filled.Lock) { killSwitch = it; preferences.edit().putBoolean("killSwitch", it).apply() }
-                            Divider(color = Color(0xFF283448))
+                            Divider(color = Color(0xFF354239))
                             SettingRow("Split Tunneling", "انتخاب برنامه‌های عبوری", splitTunnel, Icons.Filled.Tune) { splitTunnel = it; preferences.edit().putBoolean("splitTunnel", it).apply() }
                         }
                         Spacer(Modifier.height(12.dp))
@@ -790,7 +884,7 @@ private fun EagleScreen() {
 @Composable
 private fun PanelCard(content: @Composable ColumnScope.() -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFF273449), RoundedCornerShape(22.dp)),
+        modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFF354239), RoundedCornerShape(22.dp)),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Panel)
     ) {
@@ -814,7 +908,7 @@ private fun SectionTitle(title: String, subtitle: String) {
 @Composable
 private fun MetricCard(label: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier) {
     Card(
-        modifier = modifier.border(1.dp, Color(0xFF273449), RoundedCornerShape(18.dp)),
+        modifier = modifier.border(1.dp, Color(0xFF354239), RoundedCornerShape(18.dp)),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = Panel)
     ) {
