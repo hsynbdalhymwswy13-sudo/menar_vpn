@@ -167,7 +167,7 @@ class EagleVpnService : VpnService(), CommandServerHandler {
                 }
             }
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     private fun createNotificationChannel() {

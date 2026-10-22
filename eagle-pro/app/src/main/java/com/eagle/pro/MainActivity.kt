@@ -462,11 +462,7 @@ private fun EagleScreen() {
                                         val stopIntent = Intent(context, EagleVpnService::class.java).apply {
                                             action = EagleVpnService.ACTION_STOP
                                         }
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                            context.startForegroundService(stopIntent)
-                                        } else {
-                                            context.startService(stopIntent)
-                                        }
+                                        context.startService(stopIntent)
                                         message("درخواست قطع اتصال ارسال شد.")
                                     } else if (saveSingBoxConfig()) {
                                         val permissionIntent = VpnService.prepare(context)
