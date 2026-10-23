@@ -88,7 +88,7 @@ fun MenarConnectionCard(
                 ) {
                     Image(
                         painter = painterResource(R.drawable.ic_menar_eagle),
-                        contentDescription = "EAGLE",
+                        contentDescription = "MENAR",
                         modifier = Modifier.size(48.dp),
                     )
                 }
@@ -99,7 +99,7 @@ fun MenarConnectionCard(
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(
-                        text = "EAGLE",
+                        text = "MENAR",
                         style = MaterialTheme.typography.titleLarge,
                         color = Color.White,
                     )
