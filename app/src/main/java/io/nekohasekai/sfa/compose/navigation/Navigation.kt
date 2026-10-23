@@ -5,6 +5,8 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -19,6 +21,7 @@ import io.nekohasekai.sfa.compose.screen.connections.ConnectionsViewModel
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardScreen
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
 import io.nekohasekai.sfa.compose.screen.dashboard.GroupsCard
+import io.nekohasekai.sfa.compose.screen.dashboard.ProfilesCard
 import io.nekohasekai.sfa.compose.screen.dashboard.groups.GroupsViewModel
 import io.nekohasekai.sfa.compose.screen.log.HookLogScreen
 import io.nekohasekai.sfa.compose.screen.log.LogScreen
@@ -128,6 +131,34 @@ fun NavHost(
                     serviceStatus = serviceStatus,
                     showStartFab = showStartFab,
                     showStatusBar = showStatusBar,
+                    onOpenNewProfile = onOpenNewProfile,
+                )
+            }
+        }
+
+        composable(Screen.Servers.route) {
+            val vm = dashboardViewModel
+            if (vm != null) {
+                val state by vm.uiState.collectAsState()
+                ProfilesCard(
+                    profiles = state.profiles,
+                    selectedProfileId = state.selectedProfileId,
+                    isLoading = state.isLoading,
+                    showAddProfileSheet = state.showAddProfileSheet,
+                    showProfilePickerSheet = state.showProfilePickerSheet,
+                    updatingProfileId = state.updatingProfileId,
+                    updatedProfileId = state.updatedProfileId,
+                    onProfileSelected = vm::selectProfile,
+                    onProfileEdit = vm::editProfile,
+                    onProfileDelete = vm::deleteProfile,
+                    onProfileShare = vm::shareProfile,
+                    onProfileShareURL = vm::shareProfileURL,
+                    onProfileUpdate = vm::updateProfile,
+                    onProfileMove = vm::moveProfile,
+                    onShowAddProfileSheet = vm::showAddProfileSheet,
+                    onHideAddProfileSheet = vm::hideAddProfileSheet,
+                    onShowProfilePickerSheet = vm::showProfilePickerSheet,
+                    onHideProfilePickerSheet = vm::hideProfilePickerSheet,
                     onOpenNewProfile = onOpenNewProfile,
                 )
             }

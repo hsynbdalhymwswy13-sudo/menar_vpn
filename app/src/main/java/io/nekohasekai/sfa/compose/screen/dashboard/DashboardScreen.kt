@@ -189,7 +189,7 @@ fun DashboardScreen(
                                 serviceRunning &&
                                 isCardAvailableWhenServiceRunning(cardGroup, uiState)
 
-                        cardGroup == CardGroup.Profiles -> true // Profiles card is always available
+                        cardGroup == CardGroup.Profiles -> false // Profiles are managed outside the home screen
                         else -> serviceRunning && isCardAvailableWhenServiceRunning(cardGroup, uiState)
                     }
                 }.toSet()

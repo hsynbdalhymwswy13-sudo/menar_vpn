@@ -47,8 +47,9 @@
     <string name="default_text">پیش‌فرض</string>
 
     <!-- Navigation Titles -->
-    <string name="title_dashboard">داشبورد</string>
+    <string name="title_dashboard">خانه</string>
     <string name="title_configuration">پروفایل‌ها</string>
+    <string name="title_servers">سرورها</string>
     <string name="title_log">گزارش‌ها</string>
     <string name="title_settings">تنظیمات</string>
     <string name="title_app_settings">برنامه</string>
