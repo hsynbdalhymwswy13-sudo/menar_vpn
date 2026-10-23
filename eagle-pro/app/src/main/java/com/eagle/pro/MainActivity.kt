@@ -234,6 +234,19 @@ private fun EagleScreen() {
         scope.launch { snack.showSnackbar(text) }
     }
 
+    fun validateImportedConfig(input: String): String? {
+        return try {
+            val converted = EagleConfigConverter.convert(input.trim())
+            val parsed = JSONObject(converted)
+            require(parsed.has("outbounds") && parsed.has("inbounds")) {
+                "ساختار کانفیگ ناقص است."
+            }
+            null
+        } catch (e: Exception) {
+            e.message ?: "ساختار کانفیگ معتبر نیست."
+        }
+    }
+
     fun saveSingBoxConfig(): Boolean {
         val input = draft.trim().ifBlank { selectedProfile.trim() }
         if (input.isBlank()) {
@@ -314,14 +327,19 @@ private fun EagleScreen() {
                 if (imported.isBlank()) {
                     message("فایل خالی است.")
                 } else {
-                    draft = imported
-                    if (!profiles.contains(imported)) {
-                        profiles.add(imported)
-                        preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
+                    val validationError = validateImportedConfig(imported)
+                    if (validationError != null) {
+                        message("کانفیگ فایل معتبر نیست: $validationError")
+                    } else {
+                        draft = imported
+                        if (!profiles.contains(imported)) {
+                            profiles.add(imported)
+                            preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
+                        }
+                        selectedProfile = imported
+                        preferences.edit().putString("selectedProfile", selectedProfile).apply()
+                        message("کانفیگ فایل بررسی و وارد شد؛ برای اتصال ذخیره و اجرا کنید.")
                     }
-                    selectedProfile = imported
-                    preferences.edit().putString("selectedProfile", selectedProfile).apply()
-                    message("فایل وارد شد؛ برای اتصال، کانفیگ را ذخیره و اجرا کنید.")
                 }
             } catch (e: Exception) {
                 message("خواندن فایل ناموفق بود: ${e.message ?: "خطای فایل"}")
@@ -331,23 +349,20 @@ private fun EagleScreen() {
 
     val qrScanner = rememberLauncherForActivityResult(ScanContract()) { result ->
         val value = result.contents?.trim().orEmpty()
-        val supported = value.startsWith("{") ||
-            value.startsWith("vless://") ||
-            value.startsWith("vmess://") ||
-            value.startsWith("hysteria2://") ||
-            value.startsWith("trojan://") ||
-            value.startsWith("ss://")
-        if (supported) {
-            if (!profiles.contains(value)) {
-                profiles.add(value)
-                preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
+        if (value.isNotBlank()) {
+            val validationError = validateImportedConfig(value)
+            if (validationError != null) {
+                message("کانفیگ QR معتبر نیست: $validationError")
+            } else {
+                if (!profiles.contains(value)) {
+                    profiles.add(value)
+                    preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
+                }
+                draft = value
+                selectedProfile = value
+                preferences.edit().putString("selectedProfile", selectedProfile).apply()
+                message("کانفیگ QR بررسی و به فهرست سرورها اضافه شد.")
             }
-            draft = value
-            selectedProfile = value
-            preferences.edit().putString("selectedProfile", selectedProfile).apply()
-            message("QR خوانده شد؛ پروفایل ذخیره شد.")
-        } else if (value.isNotBlank()) {
-            message("QR خوانده شد، اما لینک پشتیبانی‌شده‌ای نبود.")
         }
     }
 
@@ -537,36 +552,52 @@ private fun EagleScreen() {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(
                                     onClick = {
-                                        val copied = clipboard.getText()?.text.orEmpty()
-                                        if (copied.isNotBlank()) draft = copied
-                                        else message("کلیپ‌بورد خالی است.")
+                                        val copied = clipboard.getText()?.text?.trim().orEmpty()
+                                        if (copied.isBlank()) {
+                                            message("کلیپ‌بورد خالی است.")
+                                        } else {
+                                            val validationError = validateImportedConfig(copied)
+                                            if (validationError != null) {
+                                                draft = copied
+                                                message("کانفیگ کلیپ‌بورد معتبر نیست: $validationError")
+                                            } else {
+                                                if (!profiles.contains(copied)) {
+                                                    profiles.add(copied)
+                                                    preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
+                                                }
+                                                selectedProfile = copied
+                                                preferences.edit().putString("selectedProfile", selectedProfile).apply()
+                                                draft = ""
+                                                message("کانفیگ بررسی و مستقیماً به فهرست سرورها اضافه شد.")
+                                            }
+                                        }
                                     },
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Icon(Icons.Filled.ContentPaste, contentDescription = null)
                                     Spacer(Modifier.width(5.dp))
-                                    Text("از کلیپ‌بورد")
+                                    Text("واردکردن از کلیپ‌بورد")
                                 }
                                 Button(
                                     onClick = {
                                         val value = draft.trim()
-                                        if (value.trimStart().startsWith("{") || value.startsWith("vless://") ||
-                                            value.startsWith("vmess://") ||
-                                            value.startsWith("hysteria2://") ||
-                                            value.startsWith("trojan://") ||
-                                            value.startsWith("ss://")
-                                        ) {
-                                            if (!profiles.contains(value)) {
-                                                profiles.add(value)
-                                                preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
-                                            }
-                                            selectedProfile = value
-                                            preferences.edit().putString("selectedProfile", selectedProfile).apply()
-                                            draft = ""
-                                            message("پروفایل به فهرست محلی اضافه شد.")
+                                        if (value.isBlank()) {
+                                            message("ابتدا لینک یا کانفیگ را وارد کنید.")
                                         } else {
-                                            message("لطفاً یک لینک پشتیبانی‌شده وارد کنید.")
+                                            val validationError = validateImportedConfig(value)
+                                            if (validationError != null) {
+                                                message("کانفیگ معتبر نیست: $validationError")
+                                            } else {
+                                                if (!profiles.contains(value)) {
+                                                    profiles.add(value)
+                                                    preferences.edit().putStringSet("profiles", profiles.toSet()).apply()
+                                                }
+                                                selectedProfile = value
+                                                preferences.edit().putString("selectedProfile", selectedProfile).apply()
+                                                draft = ""
+                                                message("کانفیگ بررسی شد و به فهرست سرورها اضافه شد.")
+                                            }
                                         }
                                     },
                                     modifier = Modifier.weight(1f),
