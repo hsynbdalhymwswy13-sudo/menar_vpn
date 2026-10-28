@@ -59,8 +59,8 @@ fun MenarConnectionCard(
         ),
     )
 
-    val accent = if (connected) Color(0xFFFFC857) else Color(0xFF35D6C4)
-    val statusText = if (connected) "اتصال امن عقاب برقرار است" else "آماده اتصال"
+    val accent = Color(0xFF35D07F)
+    val statusText = if (connected) "اتصال برقرار است" else "آماده اتصال"
 
     Card(
         modifier = modifier.fillMaxWidth(),

@@ -41,6 +41,7 @@ import io.nekohasekai.sfa.compose.component.RemoteControlMenuItems
 import io.nekohasekai.sfa.compose.component.rememberRemoteServers
 import io.nekohasekai.sfa.compose.navigation.NewProfileArgs
 import io.nekohasekai.sfa.compose.menar.MenarConnectionCard
+import io.nekohasekai.sfa.compose.menar.MenarServerList
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
 import io.nekohasekai.sfa.compose.topbar.OverrideTopBar
 import io.nekohasekai.sfa.constant.Status
@@ -172,6 +173,14 @@ fun DashboardScreen(
                     onToggle = { viewModel.toggleService() },
                 )
             }
+            item {
+                MenarServerList(
+                    profiles = uiState.profiles,
+                    selectedProfileId = uiState.selectedProfileId,
+                    onProfileSelected = viewModel::selectProfile,
+                )
+            }
+
             // Dynamic dashboard cards
             // Show cards when service is running OR if it's the Profiles card (always available)
             val serviceRunning = uiState.isStatusVisible
